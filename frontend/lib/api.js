@@ -335,8 +335,10 @@ class ApiService {
       .order("created_at", { ascending: false })
 
     if (params.status) query = query.eq("status", params.status)
+    if (params.category) query = query.eq("category", params.category)
     if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
     if (params.eventId) query = query.eq("event", params.eventId)
+    if (params.search) query = query.ilike("description", `%${params.search}%`)
 
     const { data, error } = await query
     if (error) err(error.message)
