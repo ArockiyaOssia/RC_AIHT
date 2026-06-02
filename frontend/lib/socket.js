@@ -1,28 +1,54 @@
-import { io } from "socket.io-client"
+import { getSupabase } from "@/lib/supabase"
 
-let socket = null
+let _channel = null
 
-export const getSocket = () => {
+export function getRealtimeChannel(channelName = "rotaract-notifications") {
   if (typeof window === "undefined") return null
-
-  if (!socket) {
-    const token = window.localStorage.getItem("accessToken")
-    if (!token) return null
-
-    socket = io(process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000", {
-      auth: { token },
-      withCredentials: true,
-    })
+  const supabase = getSupabase()
+  if (!_channel) {
+    _channel = supabase.channel(channelName)
   }
-
-  return socket
+  return _channel
 }
 
-export const disconnectSocket = () => {
-  if (socket) {
-    socket.disconnect()
-    socket = null
+export function subscribeToExpenses(callback) {
+  const supabase = getSupabase()
+  return supabase
+    .channel("expenses-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, callback)
+    .subscribe()
+}
+
+export function subscribeToEvents(callback) {
+  const supabase = getSupabase()
+  return supabase
+    .channel("events-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "events" }, callback)
+    .subscribe()
+}
+
+export function subscribeToMessages(callback) {
+  const supabase = getSupabase()
+  return supabase
+    .channel("messages-changes")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "contact_messages" }, callback)
+    .subscribe()
+}
+
+export function unsubscribe(channel) {
+  if (channel) {
+    const supabase = getSupabase()
+    supabase.removeChannel(channel)
   }
 }
 
+export function disconnectSocket() {
+  if (_channel) {
+    const supabase = getSupabase()
+    supabase.removeChannel(_channel)
+    _channel = null
+  }
+}
 
+// Legacy compatibility
+export const getSocket = () => null

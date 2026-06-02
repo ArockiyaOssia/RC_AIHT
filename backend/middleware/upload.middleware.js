@@ -63,7 +63,7 @@ export const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: config.maxFileSize, // 5MB
+    fileSize: config.maxUploadSize, // Use 5MB allowed limit
     files: 5,
   },
 })
@@ -78,14 +78,19 @@ export const uploadMultiple = upload.fields([
   { name: "photo", maxCount: 1 },
 ])
 
-// Memory storage for processing
+// Memory storage for processing (ImageKit/Cloud)
 export const memoryUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter,
   limits: {
-    fileSize: config.maxFileSize,
+    fileSize: config.maxUploadSize,
   },
 })
+
+export const uploadBillMemory = memoryUpload.single("bill")
+export const uploadPhotoMemory = memoryUpload.single("photo")
+export const uploadLogoMemory = memoryUpload.single("logo")
+export const uploadGalleryMemory = memoryUpload.array("gallery", 10)
 
 export default {
   upload,
@@ -95,4 +100,8 @@ export default {
   uploadGallery,
   uploadMultiple,
   memoryUpload,
+  uploadBillMemory,
+  uploadPhotoMemory,
+  uploadLogoMemory,
+  uploadGalleryMemory,
 }

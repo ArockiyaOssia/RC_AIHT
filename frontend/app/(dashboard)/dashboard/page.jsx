@@ -92,6 +92,24 @@ export default function MemberDashboardPage() {
     return labels[category] || category
   }
 
+  const handleDownloadRecord = async () => {
+    try {
+      const response = await api.request("/members/export-record", {
+        responseType: "blob",
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement("a")
+      link.href = url
+      link.setAttribute("download", `MyRecord_${user?.firstName || "Member"}.xlsx`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (err) {
+      console.error("Error downloading record:", err)
+      setError("Failed to download record")
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -219,7 +237,7 @@ export default function MemberDashboardPage() {
                 Edit Profile
               </Link>
             </Button>
-            <Button variant="outline" className="w-full justify-start bg-transparent" type="button">
+            <Button variant="outline" className="w-full justify-start bg-transparent" type="button" onClick={handleDownloadRecord}>
               <FileDown className="mr-2 h-4 w-4" /> Download My Record
             </Button>
           </CardContent>
@@ -252,29 +270,29 @@ export default function MemberDashboardPage() {
                       key={expense._id || expense.id}
                       className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border"
                     >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20">
-                        <Calendar className="h-5 w-5 text-primary" />
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20">
+                          <Calendar className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{eventName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {getCategoryLabel(expense.category)} •{" "}
+                            {new Date(expense.date).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-sm">{eventName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {getCategoryLabel(expense.category)} •{" "}
-                          {new Date(expense.date).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                          })}
+                      <div className="text-right">
+                        <p className="font-semibold flex items-center justify-end">
+                          <IndianRupee className="h-3 w-3" />
+                          {amount.toLocaleString("en-IN")}
                         </p>
+                        {getStatusBadge(expense.status)}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold flex items-center justify-end">
-                        <IndianRupee className="h-3 w-3" />
-                        {amount.toLocaleString("en-IN")}
-                      </p>
-                      {getStatusBadge(expense.status)}
-                    </div>
-                  </div>
                   )
                 })
               ) : (

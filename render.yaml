@@ -1,3 +1,23 @@
+envGroups:
+  - name: rotaract-shared-config
+    envVars:
+      - key: MONGODB_URI
+        value: mongodb+srv://4084senthilnathan_db_user:APGXIlTcGnujDnfG@cluster0.msixys2.mongodb.net/rotaract_club?appName=Cluster0
+      - key: JWT_SECRET
+        value: RotaractClubofAIHT185693anandinsitituteofhighertechnology
+      - key: CLOUDINARY_NAME
+        value: dddohslgv
+      - key: CLOUDINARY_API_KEY
+        value: 164913897936228
+      - key: CLOUDINARY_API_SECRET
+        value: d2itDke45YIopjuMk6iMOkig-Rk
+      - key: FRONTEND_URL
+        value: https://rotaract-frontend.onrender.com
+      - key: ALLOWED_ORIGINS
+        value: http://localhost:3000,https://rotaract-frontend.onrender.com
+      - key: NEXT_PUBLIC_API_URL
+        value: https://rotaract-backend.onrender.com/api
+
 services:
   # Backend Service
   - type: web
@@ -8,26 +28,11 @@ services:
     buildCommand: npm install
     startCommand: node server.js
     envVars:
+      - fromEnvGroup: rotaract-shared-config
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
-      - key: MONGODB_URI
-        sync: false # Set in Render Dashboard
-      - key: JWT_SECRET
-        sync: false # Set in Render Dashboard
-      - key: CLOUDINARY_NAME
-        sync: false # Set in Render Dashboard
-      - key: CLOUDINARY_API_KEY
-        sync: false # Set in Render Dashboard
-      - key: CLOUDINARY_API_SECRET
-        sync: false # Set in Render Dashboard
-      - key: FRONTEND_URL
-        sync: false # Set to your frontend URL after deployment
-      - key: ALLOWED_ORIGINS
-        sync: false # Set to your frontend URL after deployment
 
-  # Frontend Service (Static Site)
+  # Frontend Service
   - type: web
     name: rotaract-frontend
     env: node
@@ -36,7 +41,6 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
-      - key: NEXT_PUBLIC_API_URL
-        sync: false # Set to your backend URL/api after deployment
+      - fromEnvGroup: rotaract-shared-config
       - key: NODE_ENV
         value: production

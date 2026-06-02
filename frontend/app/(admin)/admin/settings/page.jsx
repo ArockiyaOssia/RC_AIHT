@@ -129,10 +129,20 @@ export default function ClubSettingsPage() {
     return contextGetLogoSrc(path) || ""
   }
 
+  const [logoSizeError, setLogoSizeError] = useState(false)
+  const [currentUploadingField, setCurrentUploadingField] = useState("")
+
   const handleLogoUpload = async (event, fieldName) => {
     const file = event.target.files?.[0]
     if (!file) return
 
+    if (file.size > 500 * 1024) {
+      setLogoSizeError(true)
+      setCurrentUploadingField(fieldName)
+      return
+    }
+
+    setLogoSizeError(false)
     setError("")
     setSuccess("")
     setIsUploadingLogo(true)
@@ -144,7 +154,6 @@ export default function ClubSettingsPage() {
       const response = await api.updateLogos(formData)
 
       if (response.data) {
-        // response.data contains updated logo URLs
         setSettings((prev) => ({
           ...prev,
           clubLogo: response.data.clubLogo ?? prev.clubLogo,
@@ -154,7 +163,6 @@ export default function ClubSettingsPage() {
         }))
       }
 
-      // Refresh global settings so all components update
       await refreshSettings()
       setSuccess("Logo updated successfully!")
     } catch (err) {
@@ -162,7 +170,6 @@ export default function ClubSettingsPage() {
       setError(err.message || "Failed to upload logo")
     } finally {
       setIsUploadingLogo(false)
-      // reset the input value so the same file can be selected again if needed
       event.target.value = ""
     }
   }
@@ -183,10 +190,20 @@ export default function ClubSettingsPage() {
         </Alert>
       )}
       {success && (
-        <Alert className="border-success bg-success/10">
+        <Alert className="border-success bg-success/10 mb-4">
           <CheckCircle className="h-4 w-4 text-success" />
           <AlertDescription className="text-success">{success}</AlertDescription>
         </Alert>
+      )}
+      {logoSizeError && (
+        <Card className="border-amber-500 bg-amber-50 dark:bg-amber-950/20 mb-4">
+          <CardContent className="pt-4 flex items-center justify-between">
+            <div className="text-amber-700 dark:text-amber-400 text-sm">
+              <span className="font-bold underline">Size Warning:</span> The logo you selected for <strong>{currentUploadingField}</strong> is larger than 500KB. Please compress it first to maintain site speed.
+            </div>
+            <Button size="sm" variant="outline" className="border-amber-500 text-amber-700 hover:bg-amber-100" onClick={() => setLogoSizeError(false)}>Dismiss</Button>
+          </CardContent>
+        </Card>
       )}
 
       <Tabs defaultValue="general" className="space-y-6">

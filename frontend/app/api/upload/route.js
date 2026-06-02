@@ -1,75 +1,38 @@
-import { NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import { Buffer } from 'buffer';
-import { v4 as uuidv4 } from 'uuid';
+import { NextResponse } from "next/server"
+import { createAdminClient } from "@/lib/supabase-admin"
+import { v4 as uuidv4 } from "uuid"
 
-// Helper function to get file extension from mime type
-const getFileExtension = (mimeType) => {
-  const mimeToExt = {
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-  };
-  return mimeToExt[mimeType] || 'bin';
-};
-
-export const runtime = 'nodejs';
+export const runtime = "nodejs"
 
 export async function POST(request) {
   try {
-    const formData = await request.formData();
-    const file = formData.get('photo');
-    
+    const supabase = createAdminClient()
+    const formData = await request.formData()
+    const file = formData.get("photo")
+    const bucket = formData.get("bucket") || "photos"
+    const folder = formData.get("folder") || "uploads"
+
     if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+      return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    // Convert the file to a buffer
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    
-    // Get file extension from content type or use a default
-    const fileExt = getFileExtension(file.type);
-    const filename = `${uuidv4()}.${fileExt}`;
-    
-    // Define upload directory
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    const filePath = path.join(uploadDir, filename);
-    
-    try {
-      // Ensure directory exists
-      await mkdir(uploadDir, { recursive: true });
-      
-      // Write the file
-      await writeFile(filePath, buffer);
-      
-      // Return the file URL
-      const fileUrl = `/uploads/${filename}`;
-      return NextResponse.json({ 
-        success: true,
-        url: fileUrl 
-      });
-      
-    } catch (error) {
-      console.error('File system error:', error);
-      return NextResponse.json(
-        { 
-          success: false,
-          error: 'Failed to save file to server' 
-        },
-        { status: 500 }
-      );
+    const bytes = await file.arrayBuffer()
+    const buffer = Buffer.from(bytes)
+    const ext = file.name?.split(".").pop() || "jpg"
+    const path = `${folder}/${uuidv4()}.${ext}`
+
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(path, buffer, { contentType: file.type, upsert: false })
+
+    if (uploadError) {
+      return NextResponse.json({ success: false, error: uploadError.message }, { status: 500 })
     }
+
+    const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path)
+
+    return NextResponse.json({ success: true, url: publicUrl, path })
   } catch (error) {
-    console.error('Upload error:', error);
-    return NextResponse.json(
-      { 
-        success: false,
-        error: error.message || 'Server error during file upload' 
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }

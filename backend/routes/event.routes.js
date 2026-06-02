@@ -13,7 +13,7 @@ import {
   getEventsDropdown,
 } from "../controllers/event.controller.js"
 import { protect, adminOnly } from "../middleware/auth.middleware.js"
-import { uploadPhoto, uploadGallery } from "../middleware/upload.middleware.js"
+import { uploadPhotoMemory, uploadGalleryMemory } from "../middleware/upload.middleware.js"
 import { eventValidation, paramValidation, queryValidation } from "../middleware/validation.middleware.js"
 
 const router = express.Router()
@@ -26,9 +26,9 @@ router.get("/", queryValidation.pagination, getEvents)
 router.get("/:id", paramValidation.mongoId, getEventById)
 
 // Admin routes
-router.post("/", adminOnly, uploadPhoto, eventValidation.create, createEvent)
-router.put("/:id", adminOnly, uploadPhoto, updateEvent)
+router.post("/", adminOnly, uploadPhotoMemory, eventValidation.create, createEvent)
+router.put("/:id", adminOnly, uploadPhotoMemory, updateEvent)
 router.delete("/:id", adminOnly, deleteEvent)
-router.post("/:id/gallery", adminOnly, uploadGallery, addGalleryImages)
+router.post("/:id/gallery", adminOnly, uploadGalleryMemory, addGalleryImages)
 
 export default router

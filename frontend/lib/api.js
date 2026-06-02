@@ -1,552 +1,913 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+import { getSupabase } from "@/lib/supabase"
+
+// Consistent response shape matching old Express API
+const ok = (data) => ({ success: true, data })
+const err = (msg) => { throw new Error(msg) }
 
 class ApiService {
-  constructor() {
-    this.baseUrl = API_BASE_URL
+  get sb() {
+    return getSupabase()
   }
 
-  async request(endpoint, options = {}, hasRetried = false) {
-    const url = `${this.baseUrl}${endpoint}`
-    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null
+  // ==========================================
+  // AUTH
+  // ==========================================
 
-    const config = {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
-        ...options.headers,
-      },
-      ...options,
+  async login({ email, password }) {
+    const { data, error } = await this.sb.auth.signInWithPassword({ email, password })
+    if (error) err(error.message)
+    const { data: profile } = await this.sb.from("profiles").select("*").eq("id", data.user.id).single()
+    await this.sb.from("profiles").update({ last_login: new Date().toISOString() }).eq("id", data.user.id)
+    return ok({ user: profile, accessToken: data.session.access_token, refreshToken: data.session.refresh_token })
+  }
+
+  async adminLogin({ email, password }) {
+    const { data, error } = await this.sb.auth.signInWithPassword({ email, password })
+    if (error) err(error.message)
+    const { data: profile } = await this.sb.from("profiles").select("*").eq("id", data.user.id).single()
+    if (!profile?.is_admin) {
+      await this.sb.auth.signOut()
+      err("Access denied. Admin privileges required.")
+    }
+    await this.sb.from("profiles").update({ last_login: new Date().toISOString() }).eq("id", data.user.id)
+    return ok({ user: profile, accessToken: data.session.access_token, refreshToken: data.session.refresh_token })
+  }
+
+  async logout() {
+    await this.sb.auth.signOut()
+    return ok(null)
+  }
+
+  async getMe() {
+    const { data: { user } } = await this.sb.auth.getUser()
+    if (!user) err("Not authenticated")
+    const { data: profile } = await this.sb.from("profiles").select("*").eq("id", user.id).single()
+    return ok({ ...profile, email: user.email })
+  }
+
+  async forgotPassword(email) {
+    const { error } = await this.sb.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
+    })
+    if (error) err(error.message)
+    return ok({ message: "Password reset email sent" })
+  }
+
+  async resetPassword(token, password) {
+    const { error } = await this.sb.auth.updateUser({ password })
+    if (error) err(error.message)
+    return ok({ message: "Password updated successfully" })
+  }
+
+  async changePassword({ currentPassword, newPassword }) {
+    const { data: { user } } = await this.sb.auth.getUser()
+    // Re-authenticate to verify current password
+    const { error: signInError } = await this.sb.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    })
+    if (signInError) err("Current password is incorrect")
+    const { error } = await this.sb.auth.updateUser({ password: newPassword })
+    if (error) err(error.message)
+    await this.sb.from("profiles").update({ has_changed_password: true }).eq("id", user.id)
+    return ok({ message: "Password changed successfully" })
+  }
+
+  async requestEmailChange({ newEmail, password }) {
+    const { error } = await this.sb.auth.updateUser({ email: newEmail })
+    if (error) err(error.message)
+    return ok({ message: "Confirmation email sent to new address" })
+  }
+
+  async approveEmailChange(token) {
+    return ok({ message: "Email change approved" })
+  }
+
+  // ==========================================
+  // MEMBER
+  // ==========================================
+
+  async getMemberDashboard() {
+    const { data: { user } } = await this.sb.auth.getUser()
+    if (!user) err("Not authenticated")
+
+    const [profileRes, expensesRes, eventsRes] = await Promise.all([
+      this.sb.from("profiles").select("*").eq("id", user.id).single(),
+      this.sb.from("expenses").select("*, event:events(id,name,start_date)").eq("member", user.id).order("created_at", { ascending: false }).limit(5),
+      this.sb.from("events").select("id,name,start_date,status,category").order("start_date", { ascending: false }).limit(5),
+    ])
+
+    const { data: statsData } = await this.sb
+      .from("expenses")
+      .select("amount, status")
+      .eq("member", user.id)
+
+    const totalExpenses = statsData?.reduce((s, e) => s + Number(e.amount), 0) || 0
+    const pendingCount = statsData?.filter(e => e.status === "pending").length || 0
+    const approvedCount = statsData?.filter(e => e.status === "approved").length || 0
+
+    return ok({
+      profile: profileRes.data,
+      recentExpenses: expensesRes.data || [],
+      recentEvents: eventsRes.data || [],
+      stats: { totalExpenses, pendingCount, approvedCount, totalCount: statsData?.length || 0 },
+    })
+  }
+
+  async getMemberProfile() {
+    const { data: { user } } = await this.sb.auth.getUser()
+    if (!user) err("Not authenticated")
+    const { data, error } = await this.sb.from("profiles").select("*").eq("id", user.id).single()
+    if (error) err(error.message)
+    return ok({ ...data, email: user.email })
+  }
+
+  async updateMemberProfile(data) {
+    const { data: { user } } = await this.sb.auth.getUser()
+    if (!user) err("Not authenticated")
+    const { data: updated, error } = await this.sb.from("profiles").update(data).eq("id", user.id).select().single()
+    if (error) err(error.message)
+    return ok(updated)
+  }
+
+  async updateProfilePhoto(formData) {
+    const { data: { user } } = await this.sb.auth.getUser()
+    if (!user) err("Not authenticated")
+    const file = formData.get("photo")
+    if (!file) err("No file provided")
+    const ext = file.name.split(".").pop()
+    const path = `${user.id}/avatar.${ext}`
+    const { error: uploadError } = await this.sb.storage.from("profiles").upload(path, file, { upsert: true })
+    if (uploadError) err(uploadError.message)
+    const { data: { publicUrl } } = this.sb.storage.from("profiles").getPublicUrl(path)
+    const { data: updated, error } = await this.sb.from("profiles").update({ photo: publicUrl, photo_id: path }).eq("id", user.id).select().single()
+    if (error) err(error.message)
+    return ok(updated)
+  }
+
+  async getMemberExpenses(params = {}) {
+    const { data: { user } } = await this.sb.auth.getUser()
+    if (!user) err("Not authenticated")
+    let query = this.sb.from("expenses").select("*, event:events(id,name,start_date,category)").eq("member", user.id).order("created_at", { ascending: false })
+    if (params.status) query = query.eq("status", params.status)
+    const { data, error } = await query
+    if (error) err(error.message)
+    return ok(data)
+  }
+
+  async getMemberExpense(id) {
+    const { data, error } = await this.sb.from("expenses").select("*, event:events(id,name,start_date), member:profiles(id,first_name,last_name)").eq("id", id).single()
+    if (error) err(error.message)
+    return ok(data)
+  }
+
+  // ==========================================
+  // EXPENSES
+  // ==========================================
+
+  async submitExpense(formData) {
+    const { data: { user } } = await this.sb.auth.getUser()
+    if (!user) err("Not authenticated")
+
+    const { data: profile } = await this.sb.from("profiles").select("rotaract_year").eq("id", user.id).single()
+
+    let billUrl = null
+    let billFileId = null
+    let billOriginalName = null
+
+    const bill = formData.get("bill")
+    if (bill && bill.size > 0) {
+      const ext = bill.name.split(".").pop()
+      const path = `bills/${user.id}/${Date.now()}.${ext}`
+      const { error: uploadError } = await this.sb.storage.from("documents").upload(path, bill)
+      if (uploadError) err(uploadError.message)
+      const { data: { publicUrl } } = this.sb.storage.from("documents").getPublicUrl(path)
+      billUrl = publicUrl
+      billFileId = path
+      billOriginalName = bill.name
     }
 
-    // Remove Content-Type for FormData
-    if (options.body instanceof FormData) {
-      delete config.headers["Content-Type"]
+    const expenseData = {
+      member: user.id,
+      event: formData.get("event"),
+      category: formData.get("category"),
+      amount: Number(formData.get("amount")),
+      date: formData.get("date") || new Date().toISOString(),
+      payment_mode: formData.get("paymentMode"),
+      description: formData.get("description"),
+      notes: formData.get("notes"),
+      bill_url: billUrl,
+      bill_file_id: billFileId,
+      bill_original_name: billOriginalName,
+      rotaract_year: profile?.rotaract_year || "2025-2026",
     }
 
-    try {
-      const response = await fetch(url, config)
-      const data = await response.json()
+    const { data, error } = await this.sb.from("expenses").insert(expenseData).select().single()
+    if (error) err(error.message)
+    return ok(data)
+  }
 
-      if (!response.ok) {
-        // Try one-time token refresh only when access token expired
-        if (
-          response.status === 401 &&
-          !hasRetried &&
-          endpoint !== "/auth/refresh-token" &&
-          data?.code === "TOKEN_EXPIRED" &&
-          typeof window !== "undefined"
-        ) {
-          const storedRefreshToken = localStorage.getItem("refreshToken")
-          if (storedRefreshToken) {
-            try {
-              const refreshResponse = await fetch(`${this.baseUrl}/auth/refresh-token`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ refreshToken: storedRefreshToken }),
-              })
-              const refreshData = await refreshResponse.json()
+  async getExpense(id) {
+    const { data, error } = await this.sb
+      .from("expenses")
+      .select("*, event:events(id,name,start_date), member:profiles(id,first_name,last_name,photo)")
+      .eq("id", id)
+      .single()
+    if (error) err(error.message)
+    return ok(data)
+  }
 
-              if (refreshResponse.ok && refreshData?.data?.accessToken) {
-                localStorage.setItem("accessToken", refreshData.data.accessToken)
-                if (refreshData.data.refreshToken) {
-                  localStorage.setItem("refreshToken", refreshData.data.refreshToken)
-                }
-                return this.request(endpoint, options, true)
-              }
-            } catch {
-              // Fall through to forced logout below
-            }
-          }
-        }
+  async getAllExpenses(params = {}) {
+    let query = this.sb
+      .from("expenses")
+      .select("*, event:events(id,name,start_date), member:profiles(id,first_name,last_name,photo,member_id)")
+      .order("created_at", { ascending: false })
 
-        // Force logout on invalid session (e.g., password changed)
-        if (
-          response.status === 401 &&
-          typeof window !== "undefined" &&
-          (
-            data?.message?.includes("Password was recently changed") ||
-            data?.message?.includes("Please login again") ||
-            data?.message?.includes("Token has expired")
-          )
-        ) {
-          localStorage.removeItem("accessToken")
-          localStorage.removeItem("refreshToken")
-          const isAdminRoute = window.location.pathname.startsWith("/admin")
-          window.location.href = isAdminRoute ? "/admin-login" : "/login"
-          return
-        }
+    if (params.status) query = query.eq("status", params.status)
+    if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
+    if (params.eventId) query = query.eq("event", params.eventId)
 
-        const error = new Error(data.message || "Something went wrong")
-        // Attach validation errors if they exist
-        if (data.errors && Array.isArray(data.errors)) {
-          error.errors = data.errors
-        }
-        throw error
+    const { data, error } = await query
+    if (error) err(error.message)
+    return ok(data)
+  }
+
+  async updateExpense(id, data) {
+    const { data: updated, error } = await this.sb.from("expenses").update(data).eq("id", id).select().single()
+    if (error) err(error.message)
+    return ok(updated)
+  }
+
+  async approveExpense(id) {
+    const { data: { user } } = await this.sb.auth.getUser()
+    const { data, error } = await this.sb.from("expenses").update({
+      status: "approved",
+      approved_by: user.id,
+      approved_at: new Date().toISOString(),
+    }).eq("id", id).select().single()
+    if (error) err(error.message)
+    return ok(data)
+  }
+
+  async rejectExpense(id, reason) {
+    const { data: { user } } = await this.sb.auth.getUser()
+    const { data, error } = await this.sb.from("expenses").update({
+      status: "rejected",
+      rejected_by: user.id,
+      rejected_at: new Date().toISOString(),
+      rejection_reason: reason,
+    }).eq("id", id).select().single()
+    if (error) err(error.message)
+    return ok(data)
+  }
+
+  async reimburseExpense(id) {
+    const { data: { user } } = await this.sb.auth.getUser()
+    const { data, error } = await this.sb.from("expenses").update({
+      status: "reimbursed",
+      reimbursed_by: user.id,
+      reimbursed_at: new Date().toISOString(),
+    }).eq("id", id).select().single()
+    if (error) err(error.message)
+    return ok(data)
+  }
+
+  async deleteExpense(id) {
+    const { error } = await this.sb.from("expenses").delete().eq("id", id)
+    if (error) err(error.message)
+    return ok({ message: "Expense deleted" })
+  }
+
+  async addManualExpense(data) {
+    const { data: { user } } = await this.sb.auth.getUser()
+    let billUrl = null, billFileId = null, billOriginalName = null
+
+    if (data instanceof FormData) {
+      const bill = data.get("bill")
+      if (bill && bill.size > 0) {
+        const ext = bill.name.split(".").pop()
+        const path = `bills/manual/${Date.now()}.${ext}`
+        await this.sb.storage.from("documents").upload(path, bill)
+        const { data: { publicUrl } } = this.sb.storage.from("documents").getPublicUrl(path)
+        billUrl = publicUrl
+        billFileId = path
+        billOriginalName = bill.name
       }
-
-      return data
-    } catch (error) {
-      throw error
+      const expenseData = {
+        member: data.get("member"),
+        event: data.get("event"),
+        category: data.get("category"),
+        amount: Number(data.get("amount")),
+        date: data.get("date") || new Date().toISOString(),
+        payment_mode: data.get("paymentMode"),
+        description: data.get("description"),
+        notes: data.get("notes"),
+        bill_url: billUrl,
+        bill_file_id: billFileId,
+        bill_original_name: billOriginalName,
+        status: "approved",
+        approved_by: user.id,
+        approved_at: new Date().toISOString(),
+        rotaract_year: data.get("rotaractYear") || "2025-2026",
+      }
+      const { data: inserted, error } = await this.sb.from("expenses").insert(expenseData).select().single()
+      if (error) err(error.message)
+      return ok(inserted)
     }
+
+    const { data: inserted, error } = await this.sb.from("expenses").insert({
+      ...data,
+      status: "approved",
+      approved_by: user.id,
+      approved_at: new Date().toISOString(),
+    }).select().single()
+    if (error) err(error.message)
+    return ok(inserted)
   }
 
-  // Event endpoints
-  async getEvents() {
-    return this.request(`/events`)
+  // ==========================================
+  // EVENTS
+  // ==========================================
+
+  async getEvents(params = {}) {
+    let query = this.sb.from("events").select("*, coordinator:profiles(id,first_name,last_name)").order("start_date", { ascending: false })
+    if (params.status) query = query.eq("status", params.status)
+    if (params.category) query = query.eq("category", params.category)
+    if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
+    if (params.isArchived !== undefined) query = query.eq("is_archived", params.isArchived === "true")
+    const { data, error } = await query
+    if (error) err(error.message)
+    return ok(data)
   }
 
-  async getEventById(id) {
-    return this.request(`/events/${id}`)
+  async getEventsDropdown() {
+    const { data, error } = await this.sb.from("events").select("id,name,start_date,status").order("start_date", { ascending: false })
+    if (error) err(error.message)
+    return ok(data)
+  }
+
+  async getEvent(id) {
+    const { data, error } = await this.sb
+      .from("events")
+      .select("*, coordinator:profiles(id,first_name,last_name)")
+      .eq("id", id)
+      .single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async createEvent(eventData) {
-    return this.request('/events', {
-      method: 'POST',
-      body: JSON.stringify(eventData),
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
+    const { data: { user } } = await this.sb.auth.getUser()
+    const { data: profile } = await this.sb.from("profiles").select("rotaract_year").eq("id", user.id).single()
+
+    const payload = {
+      ...eventData,
+      created_by: user.id,
+      rotaract_year: eventData.rotaractYear || profile?.rotaract_year || "2025-2026",
+    }
+    const { data, error } = await this.sb.from("events").insert(payload).select().single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async updateEvent(id, eventData) {
-    return this.request(`/events/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(eventData),
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
+    const { data, error } = await this.sb.from("events").update(eventData).eq("id", id).select().single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async deleteEvent(id) {
-    return this.request(`/events/${id}`, {
-      method: 'DELETE',
-    })
+    const { error } = await this.sb.from("events").delete().eq("id", id)
+    if (error) err(error.message)
+    return ok({ message: "Event deleted" })
+  }
+
+  async addEventGallery(eventId, formData) {
+    const files = formData.getAll("gallery")
+    const uploaded = []
+
+    for (const file of files) {
+      const ext = file.name.split(".").pop()
+      const path = `events/${eventId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const { error: uploadError } = await this.sb.storage.from("photos").upload(path, file)
+      if (uploadError) continue
+      const { data: { publicUrl } } = this.sb.storage.from("photos").getPublicUrl(path)
+      uploaded.push({ url: publicUrl, fileId: path, uploadedAt: new Date().toISOString() })
+    }
+
+    const { data: event } = await this.sb.from("events").select("gallery").eq("id", eventId).single()
+    const gallery = [...(event?.gallery || []), ...uploaded]
+    const { data, error } = await this.sb.from("events").update({ gallery }).eq("id", eventId).select().single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async addEventGalleryImages(id, images) {
     const formData = new FormData()
-    Array.from(images).forEach((image) => {
-      formData.append('gallery', image)
-    })
-    return this.request(`/events/${id}/gallery`, {
-      method: 'POST',
-      body: formData,
-    })
+    Array.from(images).forEach(img => formData.append("gallery", img))
+    return this.addEventGallery(id, formData)
   }
 
-  // Auth endpoints
-  async login(credentials) {
-    return this.request("/auth/login", {
-      method: "POST",
-      body: JSON.stringify(credentials),
-    })
-  }
+  // ==========================================
+  // ADMIN
+  // ==========================================
 
-  async adminLogin(credentials) {
-    return this.request("/auth/admin-login", {
-      method: "POST",
-      body: JSON.stringify(credentials),
-    })
-  }
-
-  async logout() {
-    return this.request("/auth/logout", { method: "POST" })
-  }
-
-  async getMe() {
-    return this.request("/auth/me")
-  }
-
-  async checkLoginStatus(email) {
-    return this.request(`/auth/check-login-status?email=${encodeURIComponent(email)}`)
-  }
-
-  async forgotPassword(email) {
-    return this.request("/auth/forgot-password", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    })
-  }
-
-  async resetPassword(token, password) {
-    return this.request(`/auth/reset-password/${token}`, {
-      method: "PUT",
-      body: JSON.stringify({ password }),
-    })
-  }
-
-  async changePassword(passwords) {
-    return this.request("/auth/change-password", {
-      method: "PUT",
-      body: JSON.stringify(passwords),
-    })
-  }
-
-  async requestEmailChange(data) {
-    return this.request("/auth/email-change/request", {
-      method: "POST",
-      body: JSON.stringify(data),
-    })
-  }
-
-  async approveEmailChange(token) {
-    return this.request("/auth/email-change/approve", {
-      method: "POST",
-      body: JSON.stringify({ token }),
-    })
-  }
-
-  // Member endpoints
-  async getMemberDashboard() {
-    return this.request("/members/dashboard")
-  }
-
-  async getMemberProfile() {
-    return this.request("/members/profile")
-  }
-
-  async updateMemberProfile(data) {
-    return this.request("/members/profile", {
-      method: "PUT",
-      body: JSON.stringify(data),
-    })
-  }
-
-  async updateProfilePhoto(formData) {
-    return this.request("/members/profile/photo", {
-      method: "PUT",
-      body: formData,
-    })
-  }
-
-  async getMemberExpenses(params = {}) {
-    const query = new URLSearchParams(params).toString()
-    return this.request(`/members/expenses${query ? `?${query}` : ""}`)
-  }
-
-  async getMemberExpense(id) {
-    return this.request(`/members/expenses/${id}`)
-  }
-
-  // Expense endpoints
-  async submitExpense(formData) {
-    return this.request("/expenses", {
-      method: "POST",
-      body: formData,
-    })
-  }
-
-  async getExpense(id) {
-    return this.request(`/expenses/${id}`)
-  }
-
-  async getAllExpenses(params = {}) {
-    const query = new URLSearchParams(params).toString()
-    return this.request(`/expenses/all${query ? `?${query}` : ""}`)
-  }
-
-  async updateExpense(id, data) {
-    return this.request(`/expenses/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    })
-  }
-
-  async approveExpense(id) {
-    return this.request(`/expenses/${id}/approve`, { method: "PUT" })
-  }
-
-  async rejectExpense(id, reason) {
-    return this.request(`/expenses/${id}/reject`, {
-      method: "PUT",
-      body: JSON.stringify({ reason }),
-    })
-  }
-
-  async reimburseExpense(id) {
-    return this.request(`/expenses/${id}/reimburse`, { method: "PUT" })
-  }
-
-  async deleteExpense(id) {
-    return this.request(`/expenses/${id}`, { method: "DELETE" })
-  }
-
-  async addManualExpense(data) {
-    // If data is FormData, don't stringify it
-    if (data instanceof FormData) {
-      return this.request("/expenses/manual", {
-        method: "POST",
-        body: data,
-      })
-    }
-    // Otherwise, stringify JSON
-    return this.request("/expenses/manual", {
-      method: "POST",
-      body: JSON.stringify(data),
-    })
-  }
-
-  // Event endpoints
-  async getEvents(params = {}) {
-    const query = new URLSearchParams(params).toString()
-    return this.request(`/events${query ? `?${query}` : ""}`)
-  }
-
-  async getEventsDropdown() {
-    return this.request("/events/dropdown")
-  }
-
-  async getEvent(id) {
-    return this.request(`/events/${id}`)
-  }
-
-  async createEvent(data) {
-    return this.request("/events", {
-      method: "POST",
-      body: JSON.stringify(data),
-    })
-  }
-
-  async updateEvent(id, data) {
-    return this.request(`/events/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    })
-  }
-
-  async deleteEvent(id) {
-    return this.request(`/events/${id}`, { method: "DELETE" })
-  }
-
-  async addEventGallery(id, formData) {
-    return this.request(`/events/${id}/gallery`, {
-      method: "POST",
-      body: formData,
-    })
-  }
-
-  // Admin endpoints
   async getAdminDashboard() {
-    return this.request("/admin/dashboard")
+    const [membersRes, eventsRes, expensesRes, messagesRes] = await Promise.all([
+      this.sb.from("profiles").select("id, is_active, role, created_at", { count: "exact" }),
+      this.sb.from("events").select("id, status", { count: "exact" }),
+      this.sb.from("expenses").select("id, status, amount"),
+      this.sb.from("contact_messages").select("id, is_read", { count: "exact" }).eq("is_read", false),
+    ])
+
+    const totalExpenses = expensesRes.data?.reduce((s, e) => s + Number(e.amount), 0) || 0
+    const pendingExpenses = expensesRes.data?.filter(e => e.status === "pending").length || 0
+    const activeMembers = membersRes.data?.filter(m => m.is_active).length || 0
+
+    return ok({
+      totalMembers: membersRes.count || 0,
+      activeMembers,
+      totalEvents: eventsRes.count || 0,
+      upcomingEvents: eventsRes.data?.filter(e => e.status === "upcoming").length || 0,
+      totalExpenseAmount: totalExpenses,
+      pendingExpenses,
+      unreadMessages: messagesRes.count || 0,
+    })
   }
 
   async getAdminMessages() {
-    return this.request("/admin/messages")
+    const { data, error } = await this.sb.from("contact_messages").select("*").order("created_at", { ascending: false })
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async replyToMessage(id, replyMessage) {
-    return this.request(`/admin/messages/${id}/reply`, {
-      method: "POST",
-      body: JSON.stringify({ replyMessage }),
-    })
+    const { data: { user } } = await this.sb.auth.getUser()
+    const { data, error } = await this.sb.from("contact_messages").update({
+      reply: replyMessage,
+      replied_at: new Date().toISOString(),
+      replied_by: user.id,
+      is_read: true,
+    }).eq("id", id).select().single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async deleteMessage(id) {
-    return this.request(`/admin/messages/${id}`, {
-      method: "DELETE",
-    })
+    const { error } = await this.sb.from("contact_messages").delete().eq("id", id)
+    if (error) err(error.message)
+    return ok({ message: "Message deleted" })
   }
 
   async getAllMembers(params = {}) {
-    const query = new URLSearchParams(params).toString()
-    return this.request(`/admin/members${query ? `?${query}` : ""}`)
+    let query = this.sb.from("profiles").select("*").order("created_at", { ascending: false })
+    if (params.role) query = query.eq("role", params.role)
+    if (params.isActive !== undefined) query = query.eq("is_active", params.isActive === "true")
+    if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
+    if (params.search) query = query.or(`first_name.ilike.%${params.search}%,last_name.ilike.%${params.search}%`)
+    const { data, error } = await query
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async getMembersDropdown() {
-    return this.request("/admin/members/dropdown")
+    const { data, error } = await this.sb.from("profiles").select("id,first_name,last_name,role,member_id").eq("is_active", true).order("first_name")
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async getMember(id) {
-    return this.request(`/admin/members/${id}`)
+    const { data, error } = await this.sb.from("profiles").select("*").eq("id", id).single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async addMember(data) {
-    return this.request("/admin/members", {
+    const response = await fetch("/api/admin/members", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     })
+    const result = await response.json()
+    if (!response.ok) err(result.error || "Failed to create member")
+    return result
   }
 
   async updateMember(id, data) {
-    return this.request(`/admin/members/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    })
+    const { data: updated, error } = await this.sb.from("profiles").update(data).eq("id", id).select().single()
+    if (error) err(error.message)
+    return ok(updated)
   }
 
   async changeMemberRole(id, role) {
-    return this.request(`/admin/members/${id}/role`, {
-      method: "PUT",
-      body: JSON.stringify({ role }),
-    })
+    const isAdmin = ["president", "secretary", "treasurer", "faculty_coordinator", "joint_secretary"].includes(role)
+    const { data, error } = await this.sb.from("profiles").update({ role, is_admin: isAdmin }).eq("id", id).select().single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async markAsAlumni(id) {
-    return this.request(`/admin/members/${id}/alumni`, { method: "PUT" })
+    const { data, error } = await this.sb.from("profiles").update({ is_alumni: true, role: "alumni" }).eq("id", id).select().single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async deleteMember(id) {
-    return this.request(`/admin/members/${id}`, { method: "DELETE" })
+    const response = await fetch("/api/admin/members", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    })
+    const result = await response.json()
+    if (!response.ok) err(result.error || "Failed to delete member")
+    return result
   }
 
-  // Board endpoints
+  // ==========================================
+  // BOARD
+  // ==========================================
+
   async getCurrentBoard() {
-    return this.request("/board")
+    const { data: settings } = await this.sb.from("club_settings").select("current_rotaract_year").single()
+    const year = settings?.current_rotaract_year || "2025-2026"
+    const { data, error } = await this.sb
+      .from("board_members")
+      .select("*, member:profiles(id,first_name,last_name,photo,role)")
+      .eq("rotaract_year", year)
+      .order("display_order")
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async getBoardHistory() {
-    return this.request("/board/history")
+    const { data, error } = await this.sb
+      .from("board_members")
+      .select("rotaract_year")
+      .order("rotaract_year", { ascending: false })
+    if (error) err(error.message)
+    const years = [...new Set(data?.map(b => b.rotaract_year) || [])]
+    return ok(years)
   }
 
   async getBoardByYear(year) {
-    return this.request(`/board/${year}`)
+    const { data, error } = await this.sb
+      .from("board_members")
+      .select("*, member:profiles(id,first_name,last_name,photo)")
+      .eq("rotaract_year", year)
+      .order("display_order")
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async createOrUpdateBoard(data) {
-    return this.request("/board", {
-      method: "POST",
-      body: JSON.stringify(data),
-    })
+    const { members, rotaractYear } = data
+    if (!members || !rotaractYear) err("members and rotaractYear required")
+    // Delete existing board for that year and re-insert
+    await this.sb.from("board_members").delete().eq("rotaract_year", rotaractYear)
+    const rows = members.map((m, i) => ({ ...m, rotaract_year: rotaractYear, display_order: i }))
+    const { data: inserted, error } = await this.sb.from("board_members").insert(rows).select()
+    if (error) err(error.message)
+    return ok(inserted)
   }
 
   async updateBoardMember(data) {
     if (data instanceof FormData) {
-      return this.request("/board/member", {
-        method: "PUT",
-        body: data,
-      })
+      const id = data.get("id")
+      const file = data.get("photo")
+      let photoUrl = data.get("existingPhoto")
+      if (file && file.size > 0) {
+        const ext = file.name.split(".").pop()
+        const path = `board/${id}.${ext}`
+        await this.sb.storage.from("photos").upload(path, file, { upsert: true })
+        const { data: { publicUrl } } = this.sb.storage.from("photos").getPublicUrl(path)
+        photoUrl = publicUrl
+      }
+      const { data: updated, error } = await this.sb.from("board_members").update({ ...Object.fromEntries(data), photo: photoUrl }).eq("id", id).select().single()
+      if (error) err(error.message)
+      return ok(updated)
     }
-    return this.request("/board/member", {
-      method: "PUT",
-      body: JSON.stringify(data),
-    })
+    const { data: updated, error } = await this.sb.from("board_members").update(data).eq("id", data.id).select().single()
+    if (error) err(error.message)
+    return ok(updated)
   }
 
-  // Settings endpoints
+  // ==========================================
+  // SETTINGS
+  // ==========================================
+
   async getSettings() {
-    return this.request("/settings")
+    const { data, error } = await this.sb.from("club_settings").select("*").single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async updateSettings(data) {
-    return this.request("/settings", {
-      method: "PUT",
-      body: JSON.stringify(data),
-    })
+    const { data: existing } = await this.sb.from("club_settings").select("id").single()
+    const { data: updated, error } = await this.sb.from("club_settings").update(data).eq("id", existing.id).select().single()
+    if (error) err(error.message)
+    return ok(updated)
   }
 
   async updateLogos(formData) {
-    return this.request("/settings/logos", {
-      method: "PUT",
-      body: formData,
-    })
+    const { data: existing } = await this.sb.from("club_settings").select("id").single()
+    const updates = {}
+    const logoFields = ["clubLogo", "rotaractLogo", "parentClubLogo", "collegeLogo"]
+
+    for (const field of logoFields) {
+      const file = formData.get(field)
+      if (file && file.size > 0) {
+        const ext = file.name.split(".").pop()
+        const path = `${field}.${ext}`
+        await this.sb.storage.from("logos").upload(path, file, { upsert: true })
+        const { data: { publicUrl } } = this.sb.storage.from("logos").getPublicUrl(path)
+        const dbField = field.replace(/([A-Z])/g, "_$1").toLowerCase()
+        updates[dbField] = publicUrl
+      }
+    }
+
+    const { data, error } = await this.sb.from("club_settings").update(updates).eq("id", existing.id).select().single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
-  // Report endpoints
+  // ==========================================
+  // REPORTS (delegated to Next.js API routes)
+  // ==========================================
+
   async getFinancialSummary(params = {}) {
-    const query = new URLSearchParams(params).toString()
-    return this.request(`/reports/financial-summary${query ? `?${query}` : ""}`)
+    let query = this.sb.from("expenses").select("amount, status, category, date, rotaract_year")
+    if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
+    const { data, error } = await query
+    if (error) err(error.message)
+
+    const summary = {
+      total: data?.reduce((s, e) => s + Number(e.amount), 0) || 0,
+      approved: data?.filter(e => e.status === "approved").reduce((s, e) => s + Number(e.amount), 0) || 0,
+      pending: data?.filter(e => e.status === "pending").reduce((s, e) => s + Number(e.amount), 0) || 0,
+      reimbursed: data?.filter(e => e.status === "reimbursed").reduce((s, e) => s + Number(e.amount), 0) || 0,
+      byCategory: {},
+      byMonth: {},
+    }
+    data?.forEach(e => {
+      summary.byCategory[e.category] = (summary.byCategory[e.category] || 0) + Number(e.amount)
+      const month = new Date(e.date).toLocaleString("default", { month: "short", year: "numeric" })
+      summary.byMonth[month] = (summary.byMonth[month] || 0) + Number(e.amount)
+    })
+    return ok(summary)
   }
 
   async getMemberWiseReport(params = {}) {
-    const query = new URLSearchParams(params).toString()
-    return this.request(`/reports/member-wise${query ? `?${query}` : ""}`)
+    let query = this.sb
+      .from("expenses")
+      .select("amount, status, member:profiles(id,first_name,last_name,member_id)")
+    if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
+    const { data, error } = await query
+    if (error) err(error.message)
+
+    const memberMap = {}
+    data?.forEach(e => {
+      const id = e.member?.id
+      if (!id) return
+      if (!memberMap[id]) memberMap[id] = { member: e.member, total: 0, approved: 0, count: 0 }
+      memberMap[id].total += Number(e.amount)
+      memberMap[id].count++
+      if (e.status === "approved") memberMap[id].approved += Number(e.amount)
+    })
+    return ok(Object.values(memberMap))
   }
 
   async getEventWiseReport(params = {}) {
-    const query = new URLSearchParams(params).toString()
-    return this.request(`/reports/event-wise${query ? `?${query}` : ""}`)
+    let query = this.sb
+      .from("expenses")
+      .select("amount, status, event:events(id,name,category,start_date)")
+    if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
+    const { data, error } = await query
+    if (error) err(error.message)
+
+    const eventMap = {}
+    data?.forEach(e => {
+      const id = e.event?.id
+      if (!id) return
+      if (!eventMap[id]) eventMap[id] = { event: e.event, total: 0, count: 0 }
+      eventMap[id].total += Number(e.amount)
+      eventMap[id].count++
+    })
+    return ok(Object.values(eventMap))
   }
 
   async getLeaderboard() {
-    return this.request("/reports/leaderboard")
+    const { data, error } = await this.sb
+      .from("expenses")
+      .select("amount, member:profiles(id,first_name,last_name,photo,member_id)")
+      .eq("status", "approved")
+    if (error) err(error.message)
+
+    const memberMap = {}
+    data?.forEach(e => {
+      const id = e.member?.id
+      if (!id) return
+      if (!memberMap[id]) memberMap[id] = { member: e.member, total: 0 }
+      memberMap[id].total += Number(e.amount)
+    })
+    return ok(Object.values(memberMap).sort((a, b) => b.total - a.total).slice(0, 10))
   }
 
   async exportPDF(params = {}) {
     const query = new URLSearchParams(params).toString()
-    return this.request(`/reports/export/pdf${query ? `?${query}` : ""}`)
+    const response = await fetch(`/api/reports/pdf${query ? `?${query}` : ""}`)
+    if (!response.ok) err("Failed to generate PDF")
+    return response
   }
 
   async exportExcel(params = {}) {
     const query = new URLSearchParams(params).toString()
-    return this.request(`/reports/export/excel${query ? `?${query}` : ""}`)
+    const response = await fetch(`/api/reports/excel${query ? `?${query}` : ""}`)
+    if (!response.ok) err("Failed to generate Excel")
+    return response
   }
 
   async exportBillsZip(params = {}) {
     const query = new URLSearchParams(params).toString()
-    return this.request(`/reports/export/bills${query ? `?${query}` : ""}`)
+    const response = await fetch(`/api/reports/bills${query ? `?${query}` : ""}`)
+    if (!response.ok) err("Failed to generate ZIP")
+    return response
   }
 
-  // Archive endpoints
+  // ==========================================
+  // GALLERY
+  // ==========================================
+
+  async getGallery(params = {}) {
+    let query = this.sb.from("gallery_images").select("*").order("created_at", { ascending: false })
+    if (params.category) query = query.eq("category", params.category)
+    const { data, error } = await query
+    if (error) err(error.message)
+    return ok(data)
+  }
+
+  async uploadGalleryImages(formData) {
+    const { data: { user } } = await this.sb.auth.getUser()
+    const files = formData.getAll("photos")
+    const category = formData.get("category")
+    const { data: profile } = await this.sb.from("profiles").select("rotaract_year").eq("id", user.id).single()
+    const uploaded = []
+
+    for (const file of files) {
+      const ext = file.name.split(".").pop()
+      const path = `gallery/${category || "general"}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const { error: uploadError } = await this.sb.storage.from("photos").upload(path, file)
+      if (uploadError) continue
+      const { data: { publicUrl } } = this.sb.storage.from("photos").getPublicUrl(path)
+      const { data: img } = await this.sb.from("gallery_images").insert({
+        url: publicUrl,
+        file_id: path,
+        category,
+        uploaded_by: user.id,
+        rotaract_year: profile?.rotaract_year || "2025-2026",
+      }).select().single()
+      if (img) uploaded.push(img)
+    }
+    return ok(uploaded)
+  }
+
+  async deleteGalleryImage(id) {
+    const { data: img } = await this.sb.from("gallery_images").select("file_id").eq("id", id).single()
+    if (img?.file_id) await this.sb.storage.from("photos").remove([img.file_id])
+    const { error } = await this.sb.from("gallery_images").delete().eq("id", id)
+    if (error) err(error.message)
+    return ok({ message: "Image deleted" })
+  }
+
+  // ==========================================
+  // ARCHIVE
+  // ==========================================
+
   async getArchives() {
-    return this.request("/archive")
+    const { data, error } = await this.sb.from("archives").select("*").order("rotaract_year", { ascending: false })
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async getArchiveByYear(year) {
-    return this.request(`/archive/${year}`)
+    const { data, error } = await this.sb.from("archives").select("*").eq("rotaract_year", year).single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async closeYear(data = {}) {
-    return this.request("/archive/close-year", {
+    const response = await fetch("/api/archive/close-year", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     })
+    const result = await response.json()
+    if (!response.ok) err(result.error || "Failed to close year")
+    return result
   }
 
   async startNewYear(data) {
-    return this.request("/archive/start-new-year", {
+    const response = await fetch("/api/archive/start-new-year", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     })
+    const result = await response.json()
+    if (!response.ok) err(result.error || "Failed to start new year")
+    return result
   }
 
   async addArchiveFile(year, formData) {
-    return this.request(`/archive/${year}/files`, {
-      method: "POST",
-      body: formData,
-    })
+    const file = formData.get("file")
+    if (!file) err("No file provided")
+    const ext = file.name.split(".").pop()
+    const path = `archive/${year}/${Date.now()}-${file.name}`
+    const { error: uploadError } = await this.sb.storage.from("documents").upload(path, file)
+    if (uploadError) err(uploadError.message)
+    const { data: { publicUrl } } = this.sb.storage.from("documents").getPublicUrl(path)
+    const { data: archive } = await this.sb.from("archives").select("files").eq("rotaract_year", year).single()
+    const files = [...(archive?.files || []), { name: file.name, url: publicUrl, uploadedAt: new Date().toISOString() }]
+    const { data: updated, error } = await this.sb.from("archives").update({ files }).eq("rotaract_year", year).select().single()
+    if (error) err(error.message)
+    return ok(updated)
   }
 
-  // Public endpoints
+  // ==========================================
+  // PUBLIC
+  // ==========================================
+
   async getHomepage() {
-    return this.request("/public/homepage")
+    const { data, error } = await this.sb.from("club_settings").select("*").single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async getAboutRotaract() {
-    return this.request("/public/about-rotaract")
+    const { data, error } = await this.sb.from("club_settings").select("about_rotaract, areas_of_focus, established_year").single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async getAboutClub() {
-    return this.request("/public/about-club")
+    const { data, error } = await this.sb.from("club_settings").select("*").single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async getPublicGallery() {
-    return this.request("/public/gallery")
+    const { data, error } = await this.sb.from("gallery_images").select("*").order("created_at", { ascending: false })
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async getPublicEvents(params = {}) {
-    const query = new URLSearchParams(params).toString()
-    return this.request(`/public/gallery${query ? `?${query}` : ""}`)
+    let query = this.sb.from("events").select("id,name,description,start_date,end_date,category,cover_image,status,venue,attendees").neq("status", "cancelled").order("start_date", { ascending: false })
+    if (params.status) query = query.eq("status", params.status)
+    const { data, error } = await query
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async getPublicEvent(id) {
-    return this.request(`/public/events/${id}`)
+    const { data, error } = await this.sb
+      .from("events")
+      .select("id,name,description,start_date,end_date,category,cover_image,gallery,video_links,venue,attendees,status,report_link")
+      .eq("id", id)
+      .single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async getContactInfo() {
-    return this.request("/public/contact")
+    const { data, error } = await this.sb.from("club_settings").select("contact_email,contact_phone,address,meeting_schedule,google_map_url,social_media,contact_description").single()
+    if (error) err(error.message)
+    return ok(data)
   }
 
   async sendContactMessage(data) {
-    return this.request("/public/contact/message", {
-      method: "POST",
-      body: JSON.stringify(data),
-    })
+    const { data: msg, error } = await this.sb.from("contact_messages").insert(data).select().single()
+    if (error) err(error.message)
+    return ok(msg)
   }
 
   async getPublicBoard() {
-    return this.request("/public/board")
+    const { data: settings } = await this.sb.from("club_settings").select("current_rotaract_year").single()
+    const year = settings?.current_rotaract_year || "2025-2026"
+    const { data, error } = await this.sb
+      .from("board_members")
+      .select("*, member:profiles(id,first_name,last_name,photo)")
+      .eq("rotaract_year", year)
+      .order("display_order")
+    if (error) err(error.message)
+    return ok(data)
+  }
+
+  // ==========================================
+  // ASSET URL HELPER
+  // ==========================================
+  getAssetUrl(path) {
+    if (!path) return null
+    if (path.startsWith("http")) return path
+    return path
   }
 }
 

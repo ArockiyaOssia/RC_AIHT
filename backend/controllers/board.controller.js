@@ -6,6 +6,7 @@ import Board from "../models/Board.model.js"
 import { createAuditLog } from "../middleware/audit.middleware.js"
 import ClubSettings from "../models/ClubSettings.model.js"
 import { getFinancialYear, deleteFile } from "../utils/helpers.js"
+import { uploadToImageKit, deleteFromImageKit } from "../utils/imagekit.js"
 import { logger } from "../utils/logger.js"
 
 // @desc    Get current board
@@ -95,27 +96,52 @@ export const createOrUpdateBoard = async (req, res) => {
       board.installationVenue = installationVenue || board.installationVenue
 
       if (req.files?.boardPhoto) {
-        if (board.boardPhoto) deleteFile(board.boardPhoto)
-        board.boardPhoto = `/uploads/photos/${req.files.boardPhoto[0].filename}`
+        if (board.boardPhotoId) {
+          await deleteFromImageKit(board.boardPhotoId)
+        } else if (board.boardPhoto) {
+          deleteFile(board.boardPhoto)
+        }
+        
+        const uploadResult = await uploadToImageKit(req.files.boardPhoto[0].buffer, `board-${year}`, "board")
+        board.boardPhoto = uploadResult.url
+        board.boardPhotoId = uploadResult.fileId
       }
       if (req.files?.bannerImage) {
-        if (board.bannerImage) deleteFile(board.bannerImage)
-        board.bannerImage = `/uploads/photos/${req.files.bannerImage[0].filename}`
+        if (board.bannerImageId) {
+          await deleteFromImageKit(board.bannerImageId)
+        } else if (board.bannerImage) {
+          deleteFile(board.bannerImage)
+        }
+        
+        const uploadResult = await uploadToImageKit(req.files.bannerImage[0].buffer, `banner-${year}`, "board")
+        board.bannerImage = uploadResult.url
+        board.bannerImageId = uploadResult.fileId
       }
 
       await board.save()
     } else {
       // Create new board
-      board = await Board.create({
+      const createData = {
         rotaractYear: year,
         theme,
         themeDescription,
         members: members || [],
         installationDate,
         installationVenue,
-        boardPhoto: req.files?.boardPhoto ? `/uploads/photos/${req.files.boardPhoto[0].filename}` : undefined,
-        bannerImage: req.files?.bannerImage ? `/uploads/photos/${req.files.bannerImage[0].filename}` : undefined,
-      })
+      }
+
+      if (req.files?.boardPhoto) {
+        const uploadResult = await uploadToImageKit(req.files.boardPhoto[0].buffer, `board-${year}`, "board")
+        createData.boardPhoto = uploadResult.url
+        createData.boardPhotoId = uploadResult.fileId
+      }
+      if (req.files?.bannerImage) {
+        const uploadResult = await uploadToImageKit(req.files.bannerImage[0].buffer, `banner-${year}`, "board")
+        createData.bannerImage = uploadResult.url
+        createData.bannerImageId = uploadResult.fileId
+      }
+
+      board = await Board.create(createData)
     }
 
     // Audit log
@@ -186,10 +212,15 @@ export const updateBoardMember = async (req, res) => {
 
     // Prefer uploaded file if present, otherwise accept photo URL from body
     if (req.file) {
-      if (memberIndex >= 0 && board.members[memberIndex].photo) {
+      if (memberIndex >= 0 && board.members[memberIndex].photoId) {
+        await deleteFromImageKit(board.members[memberIndex].photoId)
+      } else if (memberIndex >= 0 && board.members[memberIndex].photo) {
         deleteFile(board.members[memberIndex].photo)
       }
-      memberData.photo = `/uploads/photos/${req.file.filename}`
+      
+      const uploadResult = await uploadToImageKit(req.file.buffer, `member-${position}-${Date.now()}`, "board")
+      memberData.photo = uploadResult.url
+      memberData.photoId = uploadResult.fileId
     } else if (photo) {
       memberData.photo = photo
     }

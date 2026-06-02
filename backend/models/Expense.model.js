@@ -62,7 +62,7 @@ const expenseSchema = new mongoose.Schema(
     billUrl: {
       type: String,
     },
-    billPublicId: String, // Cloudinary public ID
+    billFileId: String,
     billOriginalName: String,
 
     // Status & Approval

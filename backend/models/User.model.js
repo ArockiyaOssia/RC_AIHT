@@ -74,6 +74,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "default-avatar.png",
     },
+    photoId: String,
     dateOfBirth: Date,
     address: {
       street: String,

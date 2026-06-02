@@ -35,9 +35,13 @@ const clubSettingsSchema = new mongoose.Schema(
 
     // Logos
     clubLogo: String,
+    clubLogoId: String,
     rotaractLogo: String,
+    rotaractLogoId: String,
     parentClubLogo: String,
+    parentClubLogoId: String,
     collegeLogo: String,
+    collegeLogoId: String,
 
     // Theme
     themeOfYear: String,

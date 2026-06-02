@@ -6,6 +6,7 @@ const galleryImageSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    fileId: String,
     caption: {
       type: String,
       default: "",

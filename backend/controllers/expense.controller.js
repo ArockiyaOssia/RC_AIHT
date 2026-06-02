@@ -10,6 +10,7 @@ import ClubSettings from "../models/ClubSettings.model.js"
 import { createAuditLog } from "../middleware/audit.middleware.js"
 import { sendEmail, emailTemplates } from "../utils/email.js"
 import { paginate, paginationResponse, getFinancialYear, deleteFile } from "../utils/helpers.js"
+import { uploadToImageKit, deleteFromImageKit } from "../utils/imagekit.js"
 import { logger } from "../utils/logger.js"
 
 // @desc    Create new expense
@@ -29,6 +30,14 @@ export const createExpense = async (req, res) => {
       })
     }
 
+    let billUrl = undefined
+    let billFileId = undefined
+    if (req.file) {
+      const uploadResult = await uploadToImageKit(req.file.buffer, `bill-${req.user._id}-${Date.now()}`, "bills")
+      billUrl = uploadResult.url
+      billFileId = uploadResult.fileId
+    }
+
     // Create expense
     const expense = await Expense.create({
       member: req.user._id,
@@ -39,7 +48,8 @@ export const createExpense = async (req, res) => {
       paymentMode,
       description,
       notes,
-      billUrl: req.file ? `/uploads/bills/${req.file.filename}` : undefined,
+      billUrl,
+      billFileId,
       billOriginalName: req.file?.originalname,
       rotaractYear: settings.currentRotaractYear,
     })
@@ -228,10 +238,16 @@ export const updateExpense = async (req, res) => {
 
     // Update bill if new one uploaded
     if (req.file) {
-      if (expense.billUrl) {
+      // Delete old if exists
+      if (expense.billFileId) {
+        await deleteFromImageKit(expense.billFileId)
+      } else if (expense.billUrl) {
         deleteFile(expense.billUrl)
       }
-      updates.billUrl = `/uploads/bills/${req.file.filename}`
+      
+      const uploadResult = await uploadToImageKit(req.file.buffer, `bill-${expense.member}-${Date.now()}`, "bills")
+      updates.billUrl = uploadResult.url
+      updates.billFileId = uploadResult.fileId
       updates.billOriginalName = req.file.originalname
     }
 
@@ -613,6 +629,14 @@ export const addManualExpense = async (req, res) => {
       })
     }
 
+    let billUrl = undefined
+    let billFileId = undefined
+    if (req.file) {
+      const uploadResult = await uploadToImageKit(req.file.buffer, `bill-${member}-${Date.now()}`, "bills")
+      billUrl = uploadResult.url
+      billFileId = uploadResult.fileId
+    }
+
     const expense = await Expense.create({
       member,
       event,
@@ -623,7 +647,8 @@ export const addManualExpense = async (req, res) => {
       description,
       notes,
       status,
-      billUrl: req.file ? `/uploads/bills/${req.file.filename}` : undefined,
+      billUrl,
+      billFileId,
       billOriginalName: req.file?.originalname,
       approvedBy: req.user._id,
       approvedAt: new Date(),

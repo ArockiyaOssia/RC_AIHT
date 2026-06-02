@@ -7,6 +7,7 @@ import Expense from "../models/Expense.model.js"
 import ClubSettings from "../models/ClubSettings.model.js"
 import { createAuditLog } from "../middleware/audit.middleware.js"
 import { paginate, paginationResponse, getFinancialYear, deleteFile } from "../utils/helpers.js"
+import { uploadToImageKit, deleteFromImageKit } from "../utils/imagekit.js"
 import { logger } from "../utils/logger.js"
 
 // @desc    Get member dashboard data
@@ -160,14 +161,28 @@ export const updatePhoto = async (req, res) => {
       })
     }
 
-    const photoUrl = `/uploads/photos/${req.file.filename}`
+    // Upload optimized image to ImageKit
+    const uploadResult = await uploadToImageKit(
+      req.file.buffer,
+      `photo-${req.user._id}-${Date.now()}`,
+      "photos"
+    )
+
+    const photoUrl = uploadResult.url
+    const photoId = uploadResult.fileId
 
     const currentUser = await User.findById(req.user._id)
-    if (currentUser && currentUser.photo) {
-      deleteFile(currentUser.photo)
+    
+    // Delete old photo from ImageKit if it exists
+    if (currentUser && currentUser.photoId) {
+      await deleteFromImageKit(currentUser.photoId)
     }
 
-    const user = await User.findByIdAndUpdate(req.user._id, { photo: photoUrl }, { new: true })
+    const user = await User.findByIdAndUpdate(
+      req.user._id, 
+      { photo: photoUrl, photoId: photoId }, 
+      { new: true }
+    )
 
     res.status(200).json({
       success: true,

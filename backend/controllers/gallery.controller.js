@@ -1,6 +1,7 @@
 import GalleryImage from "../models/GalleryImage.model.js"
 import { logger } from "../utils/logger.js"
 import { deleteFile } from "../utils/helpers.js"
+import { uploadToImageKit, deleteFromImageKit } from "../utils/imagekit.js"
 
 // @desc    Upload an image to the general gallery
 // @route   POST /api/gallery/upload
@@ -13,8 +14,15 @@ export const uploadGalleryImage = async (req, res) => {
 
     const { caption, category } = req.body
 
+    const uploadResult = await uploadToImageKit(
+      req.file.buffer, 
+      `gallery-${Date.now()}`, 
+      "gallery"
+    )
+
     const image = await GalleryImage.create({
-      url: `/uploads/gallery/${req.file.filename}`, // Assuming multer saves it naturally
+      url: uploadResult.url,
+      fileId: uploadResult.fileId,
       caption: caption || "",
       category: category || "General",
       uploadedBy: req.user._id,
@@ -64,8 +72,10 @@ export const deleteGalleryImage = async (req, res) => {
       return res.status(404).json({ success: false, message: "Image not found" })
     }
 
-    // Delete file from filesystem
-    if (image.url) {
+    // Delete file from ImageKit/filesystem
+    if (image.fileId) {
+      await deleteFromImageKit(image.fileId)
+    } else if (image.url) {
       deleteFile(image.url)
     }
 

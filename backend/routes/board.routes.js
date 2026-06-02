@@ -11,7 +11,7 @@ import {
   getBoardHistory,
 } from "../controllers/board.controller.js"
 import { protect, adminOnly } from "../middleware/auth.middleware.js"
-import { uploadPhoto, upload } from "../middleware/upload.middleware.js"
+import { uploadPhotoMemory, memoryUpload } from "../middleware/upload.middleware.js"
 
 const router = express.Router()
 
@@ -26,12 +26,12 @@ router.use(adminOnly)
 
 router.post(
   "/",
-  upload.fields([
+  memoryUpload.fields([
     { name: "boardPhoto", maxCount: 1 },
     { name: "bannerImage", maxCount: 1 },
   ]),
   createOrUpdateBoard,
 )
-router.put("/member", uploadPhoto, updateBoardMember)
+router.put("/member", uploadPhotoMemory, updateBoardMember)
 
 export default router

@@ -67,11 +67,22 @@ app.use(
 )
 
 // Enable CORS
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || ["http://localhost:3000"];
+
 app.use(
   cors({
-    origin: process.env.ALLOWED_ORIGINS?.split(",") || ["http://localhost:3000"],
+    origin: function (origin, callback) {
+      // allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes("*")) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   }),
 )
@@ -282,31 +293,23 @@ const startServer = async () => {
     await syncAdminUsers()
   } catch (error) {
     logger.error(`Failed to sync admin users: ${error.message}`)
-    // Don't exit - allow server to start even if admin sync fails
   }
 
-  server.listen(PORT, () => {
-    logger.info(`Server running in ${process.env.NODE_ENV || "development"} mode on port ${PORT}`)
-    console.log(`
-         ROTARACT CLUB MANAGEMENT SYSTEM API                    
-         Server running on port: ${PORT}                        
-         Environment: ${process.env.NODE_ENV || "development"} 
-    `)
-  })
+  // Only listen if not running on Vercel
+  if (process.env.NODE_ENV !== "production") {
+    server.listen(PORT, () => {
+      logger.info(`Server running in development mode on port ${PORT}`)
+    })
+  }
 }
 
-startServer()
-
-// Handle unhandled promise rejections
-process.on("unhandledRejection", (err) => {
-  logger.error(`Unhandled Rejection: ${err.message}`)
-  process.exit(1)
-})
-
-// Handle uncaught exceptions
-process.on("uncaughtException", (err) => {
-  logger.error(`Uncaught Exception: ${err.message}`)
-  process.exit(1)
-})
+// Start for local development
+if (process.env.NODE_ENV !== "production") {
+  startServer()
+} else {
+  // Just connect to DB for production/serverless
+  connectDB()
+}
 
 export default app
+

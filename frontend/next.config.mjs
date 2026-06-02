@@ -3,7 +3,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  devIndicators: false,
+  devIndicators: {
+    appIsrStatus: false,
+  },
   images: {
     unoptimized: true,
   },

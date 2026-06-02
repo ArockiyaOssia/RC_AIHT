@@ -69,9 +69,11 @@ const eventSchema = new mongoose.Schema(
 
     // Media
     coverImage: String,
+    coverImageId: String,
     gallery: [
       {
         url: String,
+        fileId: String,
         caption: String,
         uploadedAt: { type: Date, default: Date.now },
       },

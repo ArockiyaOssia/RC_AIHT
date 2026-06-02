@@ -11,7 +11,7 @@ import {
   addArchiveFile,
 } from "../controllers/archive.controller.js"
 import { protect, adminOnly, treasurerOnly } from "../middleware/auth.middleware.js"
-import { upload } from "../middleware/upload.middleware.js"
+import { upload, memoryUpload } from "../middleware/upload.middleware.js"
 
 const router = express.Router()
 
@@ -23,6 +23,6 @@ router.get("/", getArchives)
 router.get("/:year", getArchiveByYear)
 router.post("/close-year", treasurerOnly, closeYear)
 router.post("/start-new-year", treasurerOnly, startNewYear)
-router.post("/:year/files", treasurerOnly, upload.single("file"), addArchiveFile)
+router.post("/:year/files", treasurerOnly, memoryUpload.single("file"), addArchiveFile)
 
 export default router

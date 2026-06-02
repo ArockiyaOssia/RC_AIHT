@@ -493,13 +493,30 @@ export const exportBillsZip = async (req, res) => {
     archive.pipe(res)
 
     // Add files to archive
-    for (const expense of expenses) {
-      const filePath = path.join(__dirname, "..", expense.billUrl)
-      if (fs.existsSync(filePath)) {
-        const fileName = `${expense.member?.firstName || "Unknown"}_${expense.event?.name || "Event"}_${expense.amount}_${expense._id}${path.extname(expense.billUrl)}`
-        archive.file(filePath, { name: fileName })
-      }
-    }
+    await Promise.allSettled(
+      expenses.map(async (expense) => {
+        try {
+          if (!expense.billUrl) return
+
+          let imageBuffer
+          const fileName = `${expense.member?.firstName || "Unknown"}_${expense.event?.name || "Event"}_${expense.amount}_${expense._id}.webp`
+
+          if (expense.billUrl.startsWith("http")) {
+            const response = await fetch(expense.billUrl)
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+            imageBuffer = Buffer.from(await response.arrayBuffer())
+            archive.append(imageBuffer, { name: fileName })
+          } else {
+            const filePath = path.join(__dirname, "..", expense.billUrl)
+            if (fs.existsSync(filePath)) {
+              archive.file(filePath, { name: fileName })
+            }
+          }
+        } catch (err) {
+          logger.error(`Failed to add bill ${expense._id} to ZIP: ${err.message}`)
+        }
+      })
+    )
 
     await archive.finalize()
   } catch (error) {

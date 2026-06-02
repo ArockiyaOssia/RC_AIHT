@@ -7,6 +7,7 @@ import Expense from "../models/Expense.model.js"
 import ClubSettings from "../models/ClubSettings.model.js"
 import { createAuditLog } from "../middleware/audit.middleware.js"
 import { paginate, paginationResponse, getFinancialYear, deleteFile } from "../utils/helpers.js"
+import { uploadToImageKit, deleteFromImageKit } from "../utils/imagekit.js"
 import { logger } from "../utils/logger.js"
 import User from "../models/User.model.js"
 import { sendEmail, emailTemplates } from "../utils/email.js"
@@ -20,6 +21,14 @@ export const createEvent = async (req, res) => {
     const { name, description, startDate, endDate, category, tags, estimatedBudget, venue, coordinator, volunteers, attendees } =
       req.body
 
+    let coverImage = undefined
+    let coverImageId = undefined
+    if (req.file) {
+      const uploadResult = await uploadToImageKit(req.file.buffer, `event-${name}-${Date.now()}`, "events")
+      coverImage = uploadResult.url
+      coverImageId = uploadResult.fileId
+    }
+
     const event = await Event.create({
       name,
       description,
@@ -32,7 +41,8 @@ export const createEvent = async (req, res) => {
       coordinator,
       volunteers,
       attendees: parseInt(attendees) || 0,
-      coverImage: req.file ? `/uploads/gallery/${req.file.filename}` : undefined,
+      coverImage,
+      coverImageId,
       createdBy: req.user._id,
       rotaractYear: settings.currentRotaractYear,
     })
@@ -234,8 +244,14 @@ export const updateEvent = async (req, res) => {
     })
 
     if (req.file) {
-      if (event.coverImage) deleteFile(event.coverImage)
-      updates.coverImage = `/uploads/gallery/${req.file.filename}`
+      if (event.coverImageId) {
+        await deleteFromImageKit(event.coverImageId)
+      } else if (event.coverImage) {
+        deleteFile(event.coverImage)
+      }
+      const uploadResult = await uploadToImageKit(req.file.buffer, `event-${event.name}-${Date.now()}`, "events")
+      updates.coverImage = uploadResult.url
+      updates.coverImageId = uploadResult.fileId
     }
 
     const updatedEvent = await Event.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true })
@@ -301,9 +317,22 @@ export const deleteEvent = async (req, res) => {
     await event.deleteOne()
 
     // Clean up physical files
-    if (event.coverImage) deleteFile(event.coverImage)
+    if (event.coverImageId) {
+      await deleteFromImageKit(event.coverImageId)
+    } else if (event.coverImage) {
+      deleteFile(event.coverImage)
+    }
+    
     if (event.gallery && event.gallery.length > 0) {
-      event.gallery.forEach(img => deleteFile(img.url))
+      await Promise.all(
+        event.gallery.map(async (img) => {
+          if (img.fileId) {
+            return deleteFromImageKit(img.fileId)
+          } else if (img.url) {
+            return deleteFile(img.url)
+          }
+        }),
+      )
     }
 
     // Audit log
@@ -360,11 +389,17 @@ export const addGalleryImages = async (req, res) => {
       })
     }
 
-    const newImages = req.files.map((file) => ({
-      url: `/uploads/gallery/${file.filename}`,
-      caption: "",
-      uploadedAt: new Date(),
-    }))
+    const uploadPromises = req.files.map(async (file) => {
+      const uploadResult = await uploadToImageKit(file.buffer, `event-gallery-${Date.now()}`, "events")
+      return {
+        url: uploadResult.url,
+        fileId: uploadResult.fileId,
+        caption: "",
+        uploadedAt: new Date(),
+      }
+    })
+
+    const newImages = await Promise.all(uploadPromises)
 
     event.gallery.push(...newImages)
     await event.save()

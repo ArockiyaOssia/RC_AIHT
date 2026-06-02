@@ -5,7 +5,7 @@
 import express from "express"
 import { getSettings, updateSettings, updateLogos } from "../controllers/settings.controller.js"
 import { protect, adminOnly } from "../middleware/auth.middleware.js"
-import { upload } from "../middleware/upload.middleware.js"
+import { memoryUpload } from "../middleware/upload.middleware.js"
 
 const router = express.Router()
 
@@ -18,7 +18,7 @@ router.use(adminOnly)
 
 router.put(
   "/",
-  upload.fields([
+  memoryUpload.fields([
     { name: "clubLogo", maxCount: 1 },
     { name: "rotaractLogo", maxCount: 1 },
     { name: "parentClubLogo", maxCount: 1 },
@@ -29,7 +29,7 @@ router.put(
 
 router.put(
   "/logos",
-  upload.fields([
+  memoryUpload.fields([
     { name: "clubLogo", maxCount: 1 },
     { name: "rotaractLogo", maxCount: 1 },
     { name: "parentClubLogo", maxCount: 1 },

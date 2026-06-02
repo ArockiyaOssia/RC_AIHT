@@ -1,3 +1,0 @@
-# RCCLUB
-# RCCLUB
-# RotCLUB

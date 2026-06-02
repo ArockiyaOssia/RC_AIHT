@@ -5,6 +5,7 @@
 import ClubSettings from "../models/ClubSettings.model.js"
 import { createAuditLog } from "../middleware/audit.middleware.js"
 import { deleteFile } from "../utils/helpers.js"
+import { uploadToImageKit, deleteFromImageKit } from "../utils/imagekit.js"
 import { logger } from "../utils/logger.js"
 
 // @desc    Get club settings
@@ -125,23 +126,35 @@ export const updateSettings = async (req, res) => {
       }
     })
 
-    // Handle logo uploads
+    // Handle logo uploads to ImageKit in parallel
     if (req.files) {
-      if (req.files.clubLogo) {
-        if (settings.clubLogo) deleteFile(settings.clubLogo)
-        updates.clubLogo = `/uploads/logos/${req.files.clubLogo[0].filename}`
+      const logoFields = ["clubLogo", "rotaractLogo", "parentClubLogo", "collegeLogo"]
+      const uploadPromises = []
+      
+      for (const field of logoFields) {
+        if (req.files[field]) {
+          const processLogo = async () => {
+            // Delete old if exists
+            if (settings[`${field}Id`]) {
+              await deleteFromImageKit(settings[`${field}Id`])
+            } else if (settings[field]) {
+              deleteFile(settings[field])
+            }
+            
+            const uploadResult = await uploadToImageKit(
+              req.files[field][0].buffer, 
+              `${field}-${Date.now()}`, 
+              "logos"
+            )
+            updates[field] = uploadResult.url
+            updates[`${field}Id`] = uploadResult.fileId
+          }
+          uploadPromises.push(processLogo())
+        }
       }
-      if (req.files.rotaractLogo) {
-        if (settings.rotaractLogo) deleteFile(settings.rotaractLogo)
-        updates.rotaractLogo = `/uploads/logos/${req.files.rotaractLogo[0].filename}`
-      }
-      if (req.files.parentClubLogo) {
-        if (settings.parentClubLogo) deleteFile(settings.parentClubLogo)
-        updates.parentClubLogo = `/uploads/logos/${req.files.parentClubLogo[0].filename}`
-      }
-      if (req.files.collegeLogo) {
-        if (settings.collegeLogo) deleteFile(settings.collegeLogo)
-        updates.collegeLogo = `/uploads/logos/${req.files.collegeLogo[0].filename}`
+      
+      if (uploadPromises.length > 0) {
+        await Promise.all(uploadPromises)
       }
     }
 
@@ -188,22 +201,33 @@ export const updateLogos = async (req, res) => {
     }
 
     const updates = {}
+    const logoFields = ["clubLogo", "rotaractLogo", "parentClubLogo", "collegeLogo"]
+    const uploadPromises = []
 
-    if (req.files.clubLogo) {
-      if (settings.clubLogo) deleteFile(settings.clubLogo)
-      updates.clubLogo = `/uploads/logos/${req.files.clubLogo[0].filename}`
+    for (const field of logoFields) {
+      if (req.files[field]) {
+        const processLogo = async () => {
+          // Delete old if exists
+          if (settings[`${field}Id`]) {
+            await deleteFromImageKit(settings[`${field}Id`])
+          } else if (settings[field]) {
+            deleteFile(settings[field])
+          }
+          
+          const uploadResult = await uploadToImageKit(
+            req.files[field][0].buffer, 
+            `${field}-${Date.now()}`, 
+            "logos"
+          )
+          updates[field] = uploadResult.url
+          updates[`${field}Id`] = uploadResult.fileId
+        }
+        uploadPromises.push(processLogo())
+      }
     }
-    if (req.files.rotaractLogo) {
-      if (settings.rotaractLogo) deleteFile(settings.rotaractLogo)
-      updates.rotaractLogo = `/uploads/logos/${req.files.rotaractLogo[0].filename}`
-    }
-    if (req.files.parentClubLogo) {
-      if (settings.parentClubLogo) deleteFile(settings.parentClubLogo)
-      updates.parentClubLogo = `/uploads/logos/${req.files.parentClubLogo[0].filename}`
-    }
-    if (req.files.collegeLogo) {
-      if (settings.collegeLogo) deleteFile(settings.collegeLogo)
-      updates.collegeLogo = `/uploads/logos/${req.files.collegeLogo[0].filename}`
+
+    if (uploadPromises.length > 0) {
+      await Promise.all(uploadPromises)
     }
 
     Object.assign(settings, updates)

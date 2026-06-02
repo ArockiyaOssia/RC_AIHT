@@ -41,19 +41,7 @@ export function ClubSettingsProvider({ children }) {
   // Helper function to get logo URL
   const getLogoSrc = (logoPath) => {
     if (!logoPath) return null
-    // If it's already a full URL, return as is
-    if (logoPath.startsWith("http://") || logoPath.startsWith("https://")) {
-      return logoPath
-    }
-    // If it starts with /uploads, prepend API base URL (without /api)
-    if (logoPath.startsWith("/uploads")) {
-      let apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-      // Remove /api from the end if present, since uploads are served from root
-      if (apiBaseUrl.endsWith("/api")) {
-        apiBaseUrl = apiBaseUrl.replace(/\/api$/, "")
-      }
-      return `${apiBaseUrl}${logoPath}`
-    }
+    if (logoPath.startsWith("http://") || logoPath.startsWith("https://")) return logoPath
     return logoPath
   }
 

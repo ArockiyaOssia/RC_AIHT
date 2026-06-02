@@ -300,10 +300,17 @@ export const addArchiveFile = async (req, res) => {
       })
     }
 
+    const uploadResult = await uploadToImageKit(
+      req.file.buffer, 
+      `archive-${req.params.year}-${req.file.originalname}`, 
+      "archives"
+    )
+
     archive.files.push({
       name: name || req.file.originalname,
       type: type || "other",
-      url: `/uploads/archives/${req.file.filename}`,
+      url: uploadResult.url,
+      fileId: uploadResult.fileId,
     })
 
     await archive.save()

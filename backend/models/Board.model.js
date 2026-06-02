@@ -34,6 +34,7 @@ const boardMemberSchema = new mongoose.Schema({
     ],
   },
   photo: String,
+  photoId: String,
   email: String,
   phone: String,
   linkedIn: String,
@@ -57,7 +58,9 @@ const boardSchema = new mongoose.Schema(
 
     // Photos
     boardPhoto: String,
+    boardPhotoId: String,
     bannerImage: String,
+    bannerImageId: String,
 
     // Installation Details
     installationDate: Date,

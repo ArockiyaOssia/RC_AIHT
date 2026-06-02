@@ -89,12 +89,15 @@ function SubmitExpenseContent() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
+  const [fileSizeWarning, setFileSizeWarning] = useState(false)
+
   const handleFileChange = (e) => {
     const file = e.target.files?.[0]
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setError("File size should be less than 5MB")
-        return
+      if (file.size > 500 * 1024) {
+        setFileSizeWarning(true)
+      } else {
+        setFileSizeWarning(false)
       }
       setBillFile(file)
       const reader = new FileReader()
@@ -108,6 +111,7 @@ function SubmitExpenseContent() {
   const removeBill = () => {
     setBillFile(null)
     setBillPreview(null)
+    setFileSizeWarning(false)
   }
 
   const handleSubmit = async (e) => {
@@ -190,6 +194,17 @@ function SubmitExpenseContent() {
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
+              )}
+
+              {fileSizeWarning && (
+                <Card className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+                  <CardContent className="pt-4 flex items-center justify-between">
+                    <div className="text-amber-700 dark:text-amber-400 text-sm">
+                      <span className="font-bold underline">Size Warning:</span> This bill is {Math.round(billFile.size/1024)}KB. Files over 500KB are slower to upload.
+                    </div>
+                    <Button size="sm" variant="outline" className="border-amber-500 text-amber-700" onClick={() => removeBill()}>Change</Button>
+                  </CardContent>
+                </Card>
               )}
 
               {/* Event Selection */}
