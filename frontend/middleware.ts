@@ -36,13 +36,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Redirect authenticated users away from login pages
-  if (user && (pathname === "/login" || pathname === "/admin-login")) {
-    const url = request.nextUrl.clone()
-    url.pathname = "/dashboard"
-    return NextResponse.redirect(url)
-  }
-
   return supabaseResponse
 }
 
@@ -50,7 +43,5 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/admin/:path*",
-    "/login",
-    "/admin-login",
   ],
 }
