@@ -196,7 +196,7 @@ class ApiService {
   }
 
   async getMemberExpense(id) {
-    const { data, error } = await this.sb.from("expenses").select("*, event:events(id,name,start_date), member:profiles(id,first_name,last_name)").eq("id", id).single()
+    const { data, error } = await this.sb.from("expenses").select("*, event:events(id,name,start_date), member:profiles!member(id,first_name,last_name)").eq("id", id).single()
     if (error) err(error.message)
     return ok(data)
   }
@@ -250,7 +250,7 @@ class ApiService {
   async getExpense(id) {
     const { data, error } = await this.sb
       .from("expenses")
-      .select("*, event:events(id,name,start_date), member:profiles(id,first_name,last_name,photo)")
+      .select("*, event:events(id,name,start_date), member:profiles!member(id,first_name,last_name,photo)")
       .eq("id", id)
       .single()
     if (error) err(error.message)
@@ -260,7 +260,7 @@ class ApiService {
   async getAllExpenses(params = {}) {
     let query = this.sb
       .from("expenses")
-      .select("*, event:events(id,name,start_date), member:profiles(id,first_name,last_name,photo,member_id)")
+      .select("*, event:events(id,name,start_date), member:profiles!member(id,first_name,last_name,photo,member_id)")
       .order("created_at", { ascending: false })
 
     if (params.status) query = query.eq("status", params.status)
@@ -370,7 +370,7 @@ class ApiService {
   // ==========================================
 
   async getEvents(params = {}) {
-    let query = this.sb.from("events").select("*, coordinator:profiles(id,first_name,last_name)").order("start_date", { ascending: false })
+    let query = this.sb.from("events").select("*, coordinator:profiles!coordinator(id,first_name,last_name)").order("start_date", { ascending: false })
     if (params.status) query = query.eq("status", params.status)
     if (params.category) query = query.eq("category", params.category)
     if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
@@ -389,7 +389,7 @@ class ApiService {
   async getEvent(id) {
     const { data, error } = await this.sb
       .from("events")
-      .select("*, coordinator:profiles(id,first_name,last_name)")
+      .select("*, coordinator:profiles!coordinator(id,first_name,last_name)")
       .eq("id", id)
       .single()
     if (error) err(error.message)
@@ -793,7 +793,7 @@ class ApiService {
   async getMemberWiseReport(params = {}) {
     let query = this.sb
       .from("expenses")
-      .select("amount, status, member:profiles(id,first_name,last_name,member_id)")
+      .select("amount, status, member:profiles!member(id,first_name,last_name,member_id)")
     if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
     const { data, error } = await query
     if (error) err(error.message)
@@ -832,7 +832,7 @@ class ApiService {
   async getLeaderboard() {
     const { data, error } = await this.sb
       .from("expenses")
-      .select("amount, member:profiles(id,first_name,last_name,photo,member_id)")
+      .select("amount, member:profiles!member(id,first_name,last_name,photo,member_id)")
       .eq("status", "approved")
     if (error) err(error.message)
 
