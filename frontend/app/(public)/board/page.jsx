@@ -1,19 +1,41 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Mail, Phone } from "lucide-react"
+import { createClient } from "@supabase/supabase-js"
+
+export const dynamic = "force-dynamic"
 
 export const metadata = {
-  title: "Current Board | Rotaract Club of AIH",
-  description: "Meet the current board members of Rotaract Club of Apollo Institute of Hospital.",
+  title: "Current Board | Rotaract Club of AIHT",
+  description: "Meet the current board members of Rotaract Club of AIHT.",
 }
 
 async function getCurrentBoard() {
-  const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
   try {
-    const res = await fetch(`${url}/public/board`, { cache: 'no-store' })
-    if (!res.ok) return null
-    const json = await res.json()
-    return json.success ? json.data : null
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    )
+    const { data: settings } = await supabase
+      .from("club_settings")
+      .select("current_rotaract_year")
+      .single()
+    const year = settings?.current_rotaract_year || "2025-2026"
+    const { data: rows } = await supabase
+      .from("board_members")
+      .select("*")
+      .eq("rotaract_year", year)
+      .order("display_order")
+    return {
+      rotaractYear: year,
+      members: (rows || []).map((r) => ({
+        position: r.role,
+        name: r.name,
+        photo: r.photo,
+        email: r.email,
+        phone: r.phone,
+      })),
+    }
   } catch (e) {
     return null
   }

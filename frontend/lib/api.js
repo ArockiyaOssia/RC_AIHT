@@ -572,16 +572,48 @@ class ApiService {
   // BOARD
   // ==========================================
 
-  async getCurrentBoard() {
-    const { data: settings } = await this.sb.from("club_settings").select("current_rotaract_year").single()
-    const year = settings?.current_rotaract_year || "2025-2026"
+  // The board admin/public pages expect a single board OBJECT with a
+  // members[] array and a `position` field per member. We store flat rows
+  // in board_members (one per officer) and bridge the shape here.
+  async _currentYear() {
+    const { data } = await this.sb.from("club_settings").select("current_rotaract_year").single()
+    return data?.current_rotaract_year || "2025-2026"
+  }
+
+  _rowToMember(row) {
+    return {
+      id: row.id,
+      _id: row.id,
+      position: row.role, // page uses `position`; we store it in `role`
+      role: row.role,
+      name: row.name,
+      photo: row.photo,
+      photoId: row.photo_id,
+      email: row.email,
+      phone: row.phone,
+      department: row.department,
+      rotaractYear: row.rotaract_year,
+      displayOrder: row.display_order,
+    }
+  }
+
+  async _boardObject(year) {
     const { data, error } = await this.sb
       .from("board_members")
-      .select("*, member:profiles(id,first_name,last_name,photo,role)")
+      .select("*")
       .eq("rotaract_year", year)
       .order("display_order")
     if (error) err(error.message)
-    return ok(data)
+    return { rotaractYear: year, theme: "", members: (data || []).map((r) => this._rowToMember(r)) }
+  }
+
+  async getCurrentBoard() {
+    const year = await this._currentYear()
+    return { success: true, data: await this._boardObject(year) }
+  }
+
+  async getBoardByYear(year) {
+    return { success: true, data: await this._boardObject(year) }
   }
 
   async getBoardHistory() {
@@ -590,65 +622,107 @@ class ApiService {
       .select("rotaract_year")
       .order("rotaract_year", { ascending: false })
     if (error) err(error.message)
-    const years = [...new Set(data?.map(b => b.rotaract_year) || [])]
+    const years = [...new Set(data?.map((b) => b.rotaract_year) || [])]
     return ok(years)
   }
 
-  async getBoardByYear(year) {
-    const { data, error } = await this.sb
-      .from("board_members")
-      .select("*, member:profiles(id,first_name,last_name,photo)")
-      .eq("rotaract_year", year)
-      .order("display_order")
-    if (error) err(error.message)
-    return ok(data)
-  }
-
-  // Only these columns exist on board_members
-  static BOARD_COLS = ["member_id", "role", "display_order", "photo", "photo_id", "name", "department", "email", "phone"]
-
-  _pickBoardCols(obj) {
-    const snake = toSnake(obj, { strip: true })
-    const out = {}
-    for (const c of ApiService.BOARD_COLS) if (snake[c] !== undefined) out[c] = snake[c]
-    return out
-  }
-
+  // Replace the whole board for a year from a board object { members, rotaractYear }
   async createOrUpdateBoard(data) {
-    const { members, rotaractYear } = data
-    if (!members || !rotaractYear) err("members and rotaractYear required")
-    // Delete existing board for that year and re-insert
+    const rotaractYear = data.rotaractYear || (await this._currentYear())
+    const members = Array.isArray(data.members) ? data.members : []
     await this.sb.from("board_members").delete().eq("rotaract_year", rotaractYear)
-    const rows = members.map((m, i) => ({ ...this._pickBoardCols(m), rotaract_year: rotaractYear, display_order: i }))
+    if (members.length === 0) return ok([])
+    const rows = members.map((m, i) => ({
+      rotaract_year: rotaractYear,
+      role: m.position || m.role,
+      name: m.name,
+      email: m.email || null,
+      phone: m.phone || null,
+      photo: m.photo || null,
+      department: m.department || null,
+      display_order: i,
+    }))
     const { data: inserted, error } = await this.sb.from("board_members").insert(rows).select()
     if (error) err(error.message)
     return ok(inserted)
   }
 
+  // Add or update a single officer (matched by year + position/role).
   async updateBoardMember(data) {
+    const year = await this._currentYear()
+    let fields = {}
+    let photoFile = null
+    let existingPhoto = null
+
     if (data instanceof FormData) {
-      const id = data.get("id")
-      const file = data.get("photo")
-      let photoUrl = data.get("existingPhoto")
-      if (file && file.size > 0) {
-        const ext = file.name.split(".").pop()
-        const path = `board/${id}-${Date.now()}.${ext}`
-        await this.sb.storage.from("photos").upload(path, file, { upsert: true })
+      const raw = Object.fromEntries(data)
+      photoFile = data.get("photo") instanceof File ? data.get("photo") : null
+      if (typeof raw.photo === "string") existingPhoto = raw.photo
+      fields = {
+        role: raw.position || raw.role,
+        name: raw.name,
+        email: raw.email || null,
+        phone: raw.phone || null,
+        department: raw.department || null,
+      }
+    } else {
+      fields = {
+        role: data.position || data.role,
+        name: data.name,
+        email: data.email || null,
+        phone: data.phone || null,
+        department: data.department || null,
+      }
+      existingPhoto = typeof data.photo === "string" ? data.photo : null
+    }
+
+    if (!fields.role) err("position is required")
+
+    // Find existing officer for this year + position
+    const { data: existingRows } = await this.sb
+      .from("board_members")
+      .select("id, display_order")
+      .eq("rotaract_year", year)
+      .eq("role", fields.role)
+      .limit(1)
+    const existing = existingRows?.[0]
+
+    // Upload new photo if provided
+    let photoUrl = existingPhoto
+    if (photoFile && photoFile.size > 0) {
+      const ext = photoFile.name.split(".").pop()
+      const path = `board/${year}/${fields.role}-${Date.now()}.${ext}`
+      const { error: upErr } = await this.sb.storage.from("photos").upload(path, photoFile, { upsert: true })
+      if (!upErr) {
         const { data: { publicUrl } } = this.sb.storage.from("photos").getPublicUrl(path)
         photoUrl = publicUrl
       }
-      const raw = Object.fromEntries(data)
-      delete raw.existingPhoto
-      const payload = this._pickBoardCols(raw)
-      if (photoUrl) payload.photo = photoUrl
-      const { data: updated, error } = await this.sb.from("board_members").update(payload).eq("id", id).select().single()
+    }
+    if (photoUrl) fields.photo = photoUrl
+
+    if (existing) {
+      const { data: updated, error } = await this.sb
+        .from("board_members")
+        .update(fields)
+        .eq("id", existing.id)
+        .select()
+        .single()
       if (error) err(error.message)
       return ok(updated)
     }
-    const payload = this._pickBoardCols(data)
-    const { data: updated, error } = await this.sb.from("board_members").update(payload).eq("id", data.id || data._id).select().single()
+
+    // Insert new officer at the end
+    const { count } = await this.sb
+      .from("board_members")
+      .select("id", { count: "exact", head: true })
+      .eq("rotaract_year", year)
+    const { data: inserted, error } = await this.sb
+      .from("board_members")
+      .insert({ ...fields, rotaract_year: year, display_order: count || 0 })
+      .select()
+      .single()
     if (error) err(error.message)
-    return ok(updated)
+    return ok(inserted)
   }
 
   // ==========================================
@@ -950,15 +1024,8 @@ class ApiService {
   }
 
   async getPublicBoard() {
-    const { data: settings } = await this.sb.from("club_settings").select("current_rotaract_year").single()
-    const year = settings?.current_rotaract_year || "2025-2026"
-    const { data, error } = await this.sb
-      .from("board_members")
-      .select("*, member:profiles(id,first_name,last_name,photo)")
-      .eq("rotaract_year", year)
-      .order("display_order")
-    if (error) err(error.message)
-    return ok(data)
+    const year = await this._currentYear()
+    return { success: true, data: await this._boardObject(year) }
   }
 
   // ==========================================
