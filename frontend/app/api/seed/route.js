@@ -58,6 +58,8 @@ export async function POST(request) {
 
   for (const admin of adminUsers) {
     try {
+      let userId = null
+
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: admin.email,
         password: admin.password,
@@ -65,25 +67,44 @@ export async function POST(request) {
       })
 
       if (authError) {
-        results.push({ email: admin.email, status: "error", message: authError.message })
-        continue
+        // User already exists (from an earlier partial run) — look it up and reset password.
+        const { data: list } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
+        const existingUser = list?.users?.find(
+          (u) => u.email?.toLowerCase() === admin.email.toLowerCase()
+        )
+        if (!existingUser) {
+          results.push({ email: admin.email, status: "error", message: authError.message })
+          continue
+        }
+        userId = existingUser.id
+        // Ensure password matches the configured one
+        await supabase.auth.admin.updateUserById(userId, {
+          password: admin.password,
+          email_confirm: true,
+        })
+      } else {
+        userId = authData.user.id
       }
 
-      const { error: profileError } = await supabase.from("profiles").insert({
-        id: authData.user.id,
-        member_id: admin.memberId,
-        first_name: admin.firstName,
-        last_name: admin.lastName,
-        phone: admin.phone,
-        role: admin.role,
-        is_admin: true,
-        rotaract_year: "2025-2026",
-      })
+      // Upsert profile so re-runs are safe
+      const { error: profileError } = await supabase.from("profiles").upsert(
+        {
+          id: userId,
+          member_id: admin.memberId,
+          first_name: admin.firstName,
+          last_name: admin.lastName,
+          phone: admin.phone,
+          role: admin.role,
+          is_admin: true,
+          rotaract_year: "2025-2026",
+        },
+        { onConflict: "id" }
+      )
 
       if (profileError) {
         results.push({ email: admin.email, status: "error", message: profileError.message })
       } else {
-        results.push({ email: admin.email, status: "created" })
+        results.push({ email: admin.email, status: "ok" })
       }
     } catch (e) {
       results.push({ email: admin.email, status: "error", message: e.message })
