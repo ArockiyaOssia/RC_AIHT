@@ -176,6 +176,9 @@ create table if not exists board_members (
   photo text,
   photo_id text,
   name text,
+  department text,
+  email text,
+  phone text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -418,8 +421,9 @@ create trigger update_settings_updated_at before update on club_settings
 -- insert into storage.buckets (id, name, public) values ('logos', 'logos', true);
 -- insert into storage.buckets (id, name, public) values ('profiles', 'profiles', true);
 -- ============================================
+-- documents is public so bill/receipt getPublicUrl() links resolve.
 insert into storage.buckets (id, name, public) values ('photos', 'photos', true) on conflict do nothing;
-insert into storage.buckets (id, name, public) values ('documents', 'documents', false) on conflict do nothing;
+insert into storage.buckets (id, name, public) values ('documents', 'documents', true) on conflict do nothing;
 insert into storage.buckets (id, name, public) values ('logos', 'logos', true) on conflict do nothing;
 insert into storage.buckets (id, name, public) values ('profiles', 'profiles', true) on conflict do nothing;
 
@@ -443,11 +447,16 @@ create policy "Users can upload own profile photo"
 create policy "Users can delete own profile photo"
   on storage.objects for delete using (bucket_id = 'profiles' and auth.role() = 'authenticated');
 
-create policy "Authenticated can view own documents"
-  on storage.objects for select using (
-    bucket_id = 'documents' and auth.role() = 'authenticated'
-  );
+create policy "Public documents readable by all"
+  on storage.objects for select using (bucket_id = 'documents');
 create policy "Authenticated can upload documents"
   on storage.objects for insert with check (bucket_id = 'documents' and auth.role() = 'authenticated');
 create policy "Authenticated can delete own documents"
   on storage.objects for delete using (bucket_id = 'documents' and auth.role() = 'authenticated');
+
+-- ============================================
+-- REALTIME (enable live subscriptions used by lib/socket.js)
+-- ============================================
+alter publication supabase_realtime add table expenses;
+alter publication supabase_realtime add table events;
+alter publication supabase_realtime add table contact_messages;

@@ -1,7 +1,45 @@
 import { getSupabase } from "@/lib/supabase"
 
-// Consistent response shape matching old Express API
-const ok = (data) => ({ success: true, data })
+// ============================================
+// CASE CONVERSION
+// MongoDB/old frontend uses camelCase; Supabase uses snake_case.
+// Convert on every read (snake->camel) and write (camel->snake) so
+// the existing pages keep working without edits.
+// ============================================
+const toCamelKey = (k) => k.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase())
+const toSnakeKey = (k) => k.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase())
+
+const WRITE_STRIP_KEYS = new Set(["_id", "id", "createdAt", "updatedAt", "created_at", "updated_at", "__v"])
+
+function toCamel(value) {
+  if (Array.isArray(value)) return value.map(toCamel)
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    const out = {}
+    for (const [k, v] of Object.entries(value)) {
+      out[toCamelKey(k)] = toCamel(v)
+    }
+    // Provide Mongo-style _id alias since pages reference record._id
+    if (out.id !== undefined && out._id === undefined) out._id = out.id
+    return out
+  }
+  return value
+}
+
+function toSnake(value, { strip = false } = {}) {
+  if (Array.isArray(value)) return value.map((v) => toSnake(v))
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    const out = {}
+    for (const [k, v] of Object.entries(value)) {
+      if (strip && WRITE_STRIP_KEYS.has(k)) continue
+      out[toSnakeKey(k)] = toSnake(v)
+    }
+    return out
+  }
+  return value
+}
+
+// Consistent response shape matching old Express API. Reads return camelCase.
+const ok = (data) => ({ success: true, data: toCamel(data) })
 const err = (msg) => { throw new Error(msg) }
 
 class ApiService {
@@ -125,7 +163,9 @@ class ApiService {
   async updateMemberProfile(data) {
     const { data: { user } } = await this.sb.auth.getUser()
     if (!user) err("Not authenticated")
-    const { data: updated, error } = await this.sb.from("profiles").update(data).eq("id", user.id).select().single()
+    const payload = toSnake(data, { strip: true })
+    delete payload.email // email lives in auth.users, not profiles
+    const { data: updated, error } = await this.sb.from("profiles").update(payload).eq("id", user.id).select().single()
     if (error) err(error.message)
     return ok(updated)
   }
@@ -233,7 +273,7 @@ class ApiService {
   }
 
   async updateExpense(id, data) {
-    const { data: updated, error } = await this.sb.from("expenses").update(data).eq("id", id).select().single()
+    const { data: updated, error } = await this.sb.from("expenses").update(toSnake(data, { strip: true })).eq("id", id).select().single()
     if (error) err(error.message)
     return ok(updated)
   }
@@ -361,7 +401,7 @@ class ApiService {
     const { data: profile } = await this.sb.from("profiles").select("rotaract_year").eq("id", user.id).single()
 
     const payload = {
-      ...eventData,
+      ...toSnake(eventData, { strip: true }),
       created_by: user.id,
       rotaract_year: eventData.rotaractYear || profile?.rotaract_year || "2025-2026",
     }
@@ -371,7 +411,7 @@ class ApiService {
   }
 
   async updateEvent(id, eventData) {
-    const { data, error } = await this.sb.from("events").update(eventData).eq("id", id).select().single()
+    const { data, error } = await this.sb.from("events").update(toSnake(eventData, { strip: true })).eq("id", id).select().single()
     if (error) err(error.message)
     return ok(data)
   }
@@ -462,7 +502,10 @@ class ApiService {
   async getAllMembers(params = {}) {
     let query = this.sb.from("profiles").select("*").order("created_at", { ascending: false })
     if (params.role) query = query.eq("role", params.role)
-    if (params.isActive !== undefined) query = query.eq("is_active", params.isActive === "true")
+    if (params.isActive !== undefined) query = query.eq("is_active", params.isActive === "true" || params.isActive === true)
+    // Pages pass status: 'active' | 'inactive'
+    if (params.status === "active") query = query.eq("is_active", true)
+    if (params.status === "inactive") query = query.eq("is_active", false)
     if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
     if (params.search) query = query.or(`first_name.ilike.%${params.search}%,last_name.ilike.%${params.search}%`)
     const { data, error } = await query
@@ -490,11 +533,13 @@ class ApiService {
     })
     const result = await response.json()
     if (!response.ok) err(result.error || "Failed to create member")
-    return result
+    return ok(result.data)
   }
 
   async updateMember(id, data) {
-    const { data: updated, error } = await this.sb.from("profiles").update(data).eq("id", id).select().single()
+    const payload = toSnake(data, { strip: true })
+    delete payload.email // email lives in auth.users, not profiles
+    const { data: updated, error } = await this.sb.from("profiles").update(payload).eq("id", id).select().single()
     if (error) err(error.message)
     return ok(updated)
   }
@@ -559,12 +604,22 @@ class ApiService {
     return ok(data)
   }
 
+  // Only these columns exist on board_members
+  static BOARD_COLS = ["member_id", "role", "display_order", "photo", "photo_id", "name", "department", "email", "phone"]
+
+  _pickBoardCols(obj) {
+    const snake = toSnake(obj, { strip: true })
+    const out = {}
+    for (const c of ApiService.BOARD_COLS) if (snake[c] !== undefined) out[c] = snake[c]
+    return out
+  }
+
   async createOrUpdateBoard(data) {
     const { members, rotaractYear } = data
     if (!members || !rotaractYear) err("members and rotaractYear required")
     // Delete existing board for that year and re-insert
     await this.sb.from("board_members").delete().eq("rotaract_year", rotaractYear)
-    const rows = members.map((m, i) => ({ ...m, rotaract_year: rotaractYear, display_order: i }))
+    const rows = members.map((m, i) => ({ ...this._pickBoardCols(m), rotaract_year: rotaractYear, display_order: i }))
     const { data: inserted, error } = await this.sb.from("board_members").insert(rows).select()
     if (error) err(error.message)
     return ok(inserted)
@@ -577,16 +632,21 @@ class ApiService {
       let photoUrl = data.get("existingPhoto")
       if (file && file.size > 0) {
         const ext = file.name.split(".").pop()
-        const path = `board/${id}.${ext}`
+        const path = `board/${id}-${Date.now()}.${ext}`
         await this.sb.storage.from("photos").upload(path, file, { upsert: true })
         const { data: { publicUrl } } = this.sb.storage.from("photos").getPublicUrl(path)
         photoUrl = publicUrl
       }
-      const { data: updated, error } = await this.sb.from("board_members").update({ ...Object.fromEntries(data), photo: photoUrl }).eq("id", id).select().single()
+      const raw = Object.fromEntries(data)
+      delete raw.existingPhoto
+      const payload = this._pickBoardCols(raw)
+      if (photoUrl) payload.photo = photoUrl
+      const { data: updated, error } = await this.sb.from("board_members").update(payload).eq("id", id).select().single()
       if (error) err(error.message)
       return ok(updated)
     }
-    const { data: updated, error } = await this.sb.from("board_members").update(data).eq("id", data.id).select().single()
+    const payload = this._pickBoardCols(data)
+    const { data: updated, error } = await this.sb.from("board_members").update(payload).eq("id", data.id || data._id).select().single()
     if (error) err(error.message)
     return ok(updated)
   }
@@ -603,7 +663,7 @@ class ApiService {
 
   async updateSettings(data) {
     const { data: existing } = await this.sb.from("club_settings").select("id").single()
-    const { data: updated, error } = await this.sb.from("club_settings").update(data).eq("id", existing.id).select().single()
+    const { data: updated, error } = await this.sb.from("club_settings").update(toSnake(data, { strip: true })).eq("id", existing.id).select().single()
     if (error) err(error.message)
     return ok(updated)
   }

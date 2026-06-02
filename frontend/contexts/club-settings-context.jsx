@@ -5,26 +5,42 @@ import api from "@/lib/api"
 
 const ClubSettingsContext = createContext(null)
 
+const SETTINGS_CACHE_KEY = "rcaiht_club_settings"
+
 export function ClubSettingsProvider({ children }) {
-  const [settings, setSettings] = useState(null)
-  const [loading, setLoading] = useState(true)
+  // Hydrate instantly from cache so branding paints without waiting on network.
+  const [settings, setSettings] = useState(() => {
+    if (typeof window === "undefined") return null
+    try {
+      const cached = sessionStorage.getItem(SETTINGS_CACHE_KEY)
+      return cached ? JSON.parse(cached) : null
+    } catch {
+      return null
+    }
+  })
+  const [loading, setLoading] = useState(!settings)
 
   const fetchSettings = useCallback(async () => {
     try {
       const response = await api.getSettings()
       setSettings(response.data)
+      try {
+        sessionStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(response.data))
+      } catch {}
     } catch (error) {
       console.error("Failed to fetch club settings:", error)
-      // Set default fallback values
-      setSettings({
-        clubName: "Rotaract Club",
-        parentClubName: "",
-        collegeName: "",
-        clubLogo: null,
-        rotaractLogo: null,
-        parentClubLogo: null,
-        collegeLogo: null,
-      })
+      // Only fall back to defaults if we have nothing cached
+      setSettings((prev) =>
+        prev || {
+          clubName: "Rotaract Club",
+          parentClubName: "",
+          collegeName: "",
+          clubLogo: null,
+          rotaractLogo: null,
+          parentClubLogo: null,
+          collegeLogo: null,
+        }
+      )
     } finally {
       setLoading(false)
     }
