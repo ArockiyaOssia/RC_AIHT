@@ -48,6 +48,73 @@ class ApiService {
   }
 
   // ==========================================
+  // LEGACY REST COMPAT
+  // A few pages still call api.request("/path", {method}). Route those
+  // handful of endpoints to Supabase so they keep working.
+  // ==========================================
+  async request(endpoint, options = {}) {
+    const method = (options.method || "GET").toUpperCase()
+    const body = options.body
+
+    // Gallery list
+    if (endpoint === "/gallery/public" && method === "GET") {
+      return this.getPublicGallery()
+    }
+
+    // Gallery upload — FormData { gallery, caption, category }
+    if (endpoint === "/gallery/upload" && method === "POST") {
+      const { data: { user } } = await this.sb.auth.getUser()
+      const file = body.get("gallery")
+      const caption = body.get("caption")
+      const category = body.get("category") || "General"
+      if (!file) err("No image provided")
+      const { data: profile } = await this.sb.from("profiles").select("rotaract_year").eq("id", user.id).single()
+      const ext = file.name.split(".").pop()
+      const path = `gallery/${category}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const { error: upErr } = await this.sb.storage.from("photos").upload(path, file)
+      if (upErr) err(upErr.message)
+      const { data: { publicUrl } } = this.sb.storage.from("photos").getPublicUrl(path)
+      const { data: img, error } = await this.sb.from("gallery_images").insert({
+        url: publicUrl, file_id: path, caption, category,
+        uploaded_by: user.id, rotaract_year: profile?.rotaract_year || "2025-2026",
+      }).select().single()
+      if (error) err(error.message)
+      return ok(img)
+    }
+
+    // Gallery delete — /gallery/:id
+    const galleryDelete = endpoint.match(/^\/gallery\/([^/]+)$/)
+    if (galleryDelete && method === "DELETE") {
+      return this.deleteGalleryImage(galleryDelete[1])
+    }
+
+    // Event gallery upload — /events/:id/gallery  FormData { gallery: files }
+    const eventGallery = endpoint.match(/^\/events\/([^/]+)\/gallery$/)
+    if (eventGallery && method === "POST") {
+      const res = await this.addEventGallery(eventGallery[1], body)
+      // page expects response.data to be the gallery array
+      return { success: true, data: res.data?.gallery || [] }
+    }
+
+    // Member record export — build CSV of the member's expenses
+    if (endpoint === "/members/export-record") {
+      const { data: { user } } = await this.sb.auth.getUser()
+      const { data: rows } = await this.sb
+        .from("expenses")
+        .select("date, category, amount, status, payment_mode, description, event:events(name)")
+        .eq("member", user.id)
+        .order("date", { ascending: false })
+      const header = "Date,Category,Amount,Status,Payment Mode,Event,Description\n"
+      const csv = header + (rows || []).map((r) =>
+        [r.date, r.category, r.amount, r.status, r.payment_mode, r.event?.name || "", (r.description || "").replace(/,/g, ";")].join(",")
+      ).join("\n")
+      return { success: true, data: csv }
+    }
+
+    err(`Unsupported legacy endpoint: ${method} ${endpoint}`)
+  }
+
+  // ==========================================
   // AUTH
   // ==========================================
 
@@ -140,15 +207,19 @@ class ApiService {
       .select("amount, status")
       .eq("member", user.id)
 
-    const totalExpenses = statsData?.reduce((s, e) => s + Number(e.amount), 0) || 0
-    const pendingCount = statsData?.filter(e => e.status === "pending").length || 0
-    const approvedCount = statsData?.filter(e => e.status === "approved").length || 0
+    const stats = statsData || []
+    const sumBy = (pred) => stats.filter(pred).reduce((s, e) => s + Number(e.amount), 0)
 
     return ok({
-      profile: profileRes.data,
+      user: profileRes.data,
       recentExpenses: expensesRes.data || [],
       recentEvents: eventsRes.data || [],
-      stats: { totalExpenses, pendingCount, approvedCount, totalCount: statsData?.length || 0 },
+      summary: {
+        totalContribution: sumBy(() => true),
+        approvedExpenses: sumBy((e) => e.status === "approved" || e.status === "reimbursed"),
+        pendingReimbursements: sumBy((e) => e.status === "pending"),
+        rejectedExpenses: stats.filter((e) => e.status === "rejected").length,
+      },
     })
   }
 
@@ -356,7 +427,7 @@ class ApiService {
     }
 
     const { data: inserted, error } = await this.sb.from("expenses").insert({
-      ...data,
+      ...toSnake(data, { strip: true }),
       status: "approved",
       approved_by: user.id,
       approved_at: new Date().toISOString(),
@@ -452,27 +523,63 @@ class ApiService {
   // ADMIN
   // ==========================================
 
+  // Returns the rich { summary, monthlyExpenses, expensesByCategory,
+  // topContributors, recentExpenses } shape the admin dashboard renders.
+  // Raw (no toCamel) to preserve _id keys the charts read.
   async getAdminDashboard() {
-    const [membersRes, eventsRes, expensesRes, messagesRes] = await Promise.all([
-      this.sb.from("profiles").select("id, is_active, role, created_at", { count: "exact" }),
-      this.sb.from("events").select("id, status", { count: "exact" }),
-      this.sb.from("expenses").select("id, status, amount"),
-      this.sb.from("contact_messages").select("id, is_read", { count: "exact" }).eq("is_read", false),
+    const year = await this._currentYear()
+    const [membersRes, eventsRes, expensesRes, messagesRes, recentRes] = await Promise.all([
+      this.sb.from("profiles").select("id, is_active", { count: "exact" }),
+      this.sb.from("events").select("id, status", { count: "exact" }).eq("rotaract_year", year),
+      this.sb.from("expenses").select("amount, status, category, date, member:profiles!member(first_name,last_name,member_id)").eq("rotaract_year", year),
+      this.sb.from("contact_messages").select("id", { count: "exact", head: true }).eq("is_read", false),
+      this.sb.from("expenses").select("id, amount, status, event:events(name), member:profiles!member(first_name,last_name)").eq("rotaract_year", year).order("created_at", { ascending: false }).limit(5),
     ])
 
-    const totalExpenses = expensesRes.data?.reduce((s, e) => s + Number(e.amount), 0) || 0
-    const pendingExpenses = expensesRes.data?.filter(e => e.status === "pending").length || 0
-    const activeMembers = membersRes.data?.filter(m => m.is_active).length || 0
+    const rows = expensesRes.data || []
+    const totalSpending = rows.reduce((s, e) => s + Number(e.amount), 0)
+    const totalContributions = rows.filter((e) => e.status === "approved" || e.status === "reimbursed").reduce((s, e) => s + Number(e.amount), 0)
+    const pendingReimbursements = rows.filter((e) => e.status === "approved").reduce((s, e) => s + Number(e.amount), 0)
+    const pendingCount = rows.filter((e) => e.status === "pending").length
 
-    return ok({
-      totalMembers: membersRes.count || 0,
-      activeMembers,
-      totalEvents: eventsRes.count || 0,
-      upcomingEvents: eventsRes.data?.filter(e => e.status === "upcoming").length || 0,
-      totalExpenseAmount: totalExpenses,
-      pendingExpenses,
-      unreadMessages: messagesRes.count || 0,
+    const monthMap = {}
+    const catMap = {}
+    const contribMap = {}
+    rows.forEach((e) => {
+      const m = new Date(e.date).getMonth() + 1
+      monthMap[m] = (monthMap[m] || 0) + Number(e.amount)
+      catMap[e.category] = (catMap[e.category] || 0) + Number(e.amount)
+      const key = e.member?.member_id || `${e.member?.first_name} ${e.member?.last_name}`
+      if (key) {
+        if (!contribMap[key]) contribMap[key] = { member: { firstName: e.member?.first_name, lastName: e.member?.last_name, memberId: e.member?.member_id }, totalContribution: 0 }
+        contribMap[key].totalContribution += Number(e.amount)
+      }
     })
+
+    return {
+      success: true,
+      data: {
+        rotaractYear: year,
+        summary: {
+          totalSpending,
+          totalContributions,
+          pendingReimbursements,
+          pendingCount,
+          totalMembers: membersRes.count || 0,
+          totalEvents: eventsRes.count || 0,
+        },
+        monthlyExpenses: Object.entries(monthMap).map(([m, total]) => ({ _id: Number(m), total })),
+        expensesByCategory: Object.entries(catMap).map(([c, total]) => ({ _id: c, total })),
+        topContributors: Object.values(contribMap).sort((a, b) => b.totalContribution - a.totalContribution).slice(0, 5),
+        recentExpenses: (recentRes.data || []).map((e) => ({
+          _id: e.id,
+          member: { firstName: e.member?.first_name, lastName: e.member?.last_name },
+          event: { name: e.event?.name },
+          amount: e.amount,
+          status: e.status,
+        })),
+      },
+    }
   }
 
   async getAdminMessages() {
@@ -768,26 +875,43 @@ class ApiService {
   // REPORTS (delegated to Next.js API routes)
   // ==========================================
 
+  // NOTE: report methods return raw {success,data} (no toCamel) because they
+  // build hand-shaped objects with _id / month keys the pages read directly.
   async getFinancialSummary(params = {}) {
     let query = this.sb.from("expenses").select("amount, status, category, date, rotaract_year")
     if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
     const { data, error } = await query
     if (error) err(error.message)
+    const rows = data || []
 
-    const summary = {
-      total: data?.reduce((s, e) => s + Number(e.amount), 0) || 0,
-      approved: data?.filter(e => e.status === "approved").reduce((s, e) => s + Number(e.amount), 0) || 0,
-      pending: data?.filter(e => e.status === "pending").reduce((s, e) => s + Number(e.amount), 0) || 0,
-      reimbursed: data?.filter(e => e.status === "reimbursed").reduce((s, e) => s + Number(e.amount), 0) || 0,
-      byCategory: {},
-      byMonth: {},
-    }
-    data?.forEach(e => {
-      summary.byCategory[e.category] = (summary.byCategory[e.category] || 0) + Number(e.amount)
-      const month = new Date(e.date).toLocaleString("default", { month: "short", year: "numeric" })
-      summary.byMonth[month] = (summary.byMonth[month] || 0) + Number(e.amount)
+    const sum = (pred) => rows.filter(pred).reduce((s, e) => s + Number(e.amount), 0)
+    const byMonthMap = {}
+    const byCatMap = {}
+    rows.forEach((e) => {
+      const m = new Date(e.date).getMonth() + 1
+      byMonthMap[m] = (byMonthMap[m] || 0) + Number(e.amount)
+      byCatMap[e.category] = (byCatMap[e.category] || 0) + Number(e.amount)
     })
-    return ok(summary)
+
+    return {
+      success: true,
+      data: {
+        totals: {
+          totalExpenses: sum(() => true),
+          totalApproved: sum((e) => e.status === "approved"),
+          totalPending: sum((e) => e.status === "pending"),
+          totalReimbursed: sum((e) => e.status === "reimbursed"),
+        },
+        expensesByMonth: Object.entries(byMonthMap).map(([month, total]) => ({
+          _id: { month: Number(month) },
+          total,
+        })),
+        expensesByCategory: Object.entries(byCatMap).map(([cat, total]) => ({
+          _id: cat,
+          total,
+        })),
+      },
+    }
   }
 
   async getMemberWiseReport(params = {}) {
@@ -799,34 +923,54 @@ class ApiService {
     if (error) err(error.message)
 
     const memberMap = {}
-    data?.forEach(e => {
+    ;(data || []).forEach((e) => {
       const id = e.member?.id
       if (!id) return
-      if (!memberMap[id]) memberMap[id] = { member: e.member, total: 0, approved: 0, count: 0 }
-      memberMap[id].total += Number(e.amount)
-      memberMap[id].count++
-      if (e.status === "approved") memberMap[id].approved += Number(e.amount)
+      if (!memberMap[id]) {
+        memberMap[id] = {
+          member: {
+            firstName: e.member.first_name,
+            lastName: e.member.last_name,
+            memberId: e.member.member_id,
+          },
+          totalAmount: 0,
+          approvedAmount: 0,
+          expenseCount: 0,
+        }
+      }
+      memberMap[id].totalAmount += Number(e.amount)
+      memberMap[id].expenseCount++
+      if (e.status === "approved") memberMap[id].approvedAmount += Number(e.amount)
     })
-    return ok(Object.values(memberMap))
+    return { success: true, data: { members: Object.values(memberMap) } }
   }
 
   async getEventWiseReport(params = {}) {
     let query = this.sb
       .from("expenses")
-      .select("amount, status, event:events(id,name,category,start_date)")
+      .select("amount, status, event:events(id,name,category,start_date,estimated_budget,status)")
     if (params.rotaractYear) query = query.eq("rotaract_year", params.rotaractYear)
     const { data, error } = await query
     if (error) err(error.message)
 
     const eventMap = {}
-    data?.forEach(e => {
-      const id = e.event?.id
-      if (!id) return
-      if (!eventMap[id]) eventMap[id] = { event: e.event, total: 0, count: 0 }
-      eventMap[id].total += Number(e.amount)
-      eventMap[id].count++
+    ;(data || []).forEach((e) => {
+      const ev = e.event
+      if (!ev?.id) return
+      if (!eventMap[ev.id]) {
+        eventMap[ev.id] = {
+          name: ev.name,
+          category: ev.category,
+          estimatedBudget: Number(ev.estimated_budget) || 0,
+          status: ev.status,
+          totalExpenses: 0,
+          expenseCount: 0,
+        }
+      }
+      eventMap[ev.id].totalExpenses += Number(e.amount)
+      eventMap[ev.id].expenseCount++
     })
-    return ok(Object.values(eventMap))
+    return { success: true, data: { events: Object.values(eventMap) } }
   }
 
   async getLeaderboard() {
@@ -837,13 +981,29 @@ class ApiService {
     if (error) err(error.message)
 
     const memberMap = {}
-    data?.forEach(e => {
+    ;(data || []).forEach((e) => {
       const id = e.member?.id
       if (!id) return
-      if (!memberMap[id]) memberMap[id] = { member: e.member, total: 0 }
-      memberMap[id].total += Number(e.amount)
+      if (!memberMap[id]) {
+        memberMap[id] = {
+          member: {
+            firstName: e.member.first_name,
+            lastName: e.member.last_name,
+            memberId: e.member.member_id,
+            photo: e.member.photo,
+          },
+          totalContribution: 0,
+          eventsCount: 0,
+        }
+      }
+      memberMap[id].totalContribution += Number(e.amount)
+      memberMap[id].eventsCount++
     })
-    return ok(Object.values(memberMap).sort((a, b) => b.total - a.total).slice(0, 10))
+    const leaderboard = Object.values(memberMap)
+      .sort((a, b) => b.totalContribution - a.totalContribution)
+      .slice(0, 10)
+      .map((item, i) => ({ ...item, rank: i + 1 }))
+    return { success: true, data: { leaderboard } }
   }
 
   async exportPDF(params = {}) {
