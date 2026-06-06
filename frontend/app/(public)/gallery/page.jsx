@@ -4,6 +4,9 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { PageHero } from "@/components/page-hero"
+import { Reveal } from "@/components/reveal"
+import { TiltCard } from "@/components/tilt-card"
 import api from "@/lib/api"
 
 export default function GalleryPage() {
@@ -53,27 +56,23 @@ export default function GalleryPage() {
   return (
     <div className="flex flex-col">
       {/* Hero */}
-      <section className="py-16 lg:py-24 border-b border-border">
-        <div className="container px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Club <span className="text-primary">Gallery</span>
-            </h1>
-            <p className="mt-6 text-lg text-muted-foreground">
-              Explore our journey through service, leadership, and community impact.
-            </p>
-          </div>
-        </div>
-      </section>
+      <PageHero
+        eyebrow="Moments"
+        title={<>Club <span className="text-gradient">Gallery</span></>}
+      >
+        Explore our journey through service, leadership, and community impact.
+      </PageHero>
 
       {/* Gallery Content */}
       <section className="py-16">
         <div className="container px-4">
           {generalImages.length > 0 ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(categorizedAlbums).map(([albumName, albumImages]) => (
-                <Link key={albumName} href={`/gallery/${encodeURIComponent(albumName)}`}>
-                  <Card className="bg-card border-border overflow-hidden group cursor-pointer h-full">
+              {Object.entries(categorizedAlbums).map(([albumName, albumImages], i) => (
+                <Reveal key={albumName} delay={(i % 3) * 80}>
+                <Link href={`/gallery/${encodeURIComponent(albumName)}`}>
+                  <TiltCard className="rounded-[var(--radius)] overflow-hidden" max={6}>
+                  <Card className="glass border-border/60 overflow-hidden group cursor-pointer h-full">
                     <div className="aspect-video relative overflow-hidden">
                       <img
                         src={getImageUrl(albumImages[0].url)}
@@ -92,7 +91,9 @@ export default function GalleryPage() {
                       </div>
                     </div>
                   </Card>
+                  </TiltCard>
                 </Link>
+                </Reveal>
               ))}
             </div>
           ) : (

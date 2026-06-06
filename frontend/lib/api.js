@@ -1191,6 +1191,58 @@ class ApiService {
   }
 
   // ==========================================
+  // MEMBER REGISTRATION (self-signup + admin approval)
+  // ==========================================
+
+  // Public: submit a registration request.
+  async register(data) {
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    })
+    const result = await res.json()
+    if (!res.ok) err(result.error || "Registration failed")
+    return result
+  }
+
+  // Admin: list registration requests (RLS restricts to admins).
+  async getRegistrations(status = "pending") {
+    let query = this.sb
+      .from("registration_requests")
+      .select("*")
+      .order("created_at", { ascending: false })
+    if (status && status !== "all") query = query.eq("status", status)
+    const { data, error } = await query
+    if (error) err(error.message)
+    return ok(data)
+  }
+
+  // Admin: approve a request -> creates account + emails credentials.
+  async approveRegistration(id) {
+    const res = await fetch("/api/admin/registrations/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    })
+    const result = await res.json()
+    if (!res.ok) err(result.error || "Approve failed")
+    return result
+  }
+
+  // Admin: reject a request (optionally with a reason).
+  async rejectRegistration(id, reason = "") {
+    const res = await fetch("/api/admin/registrations/reject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, reason }),
+    })
+    const result = await res.json()
+    if (!res.ok) err(result.error || "Reject failed")
+    return result
+  }
+
+  // ==========================================
   // ASSET URL HELPER
   // ==========================================
   getAssetUrl(path) {

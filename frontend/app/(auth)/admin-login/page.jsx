@@ -54,7 +54,7 @@ export default function AdminLoginPage() {
 
   return (
     <div className="w-full max-w-md">
-      <Card className="bg-card border-border">
+      <Card className="glass-strong glow border-border/60">
         <CardHeader className="text-center">
           <div className="mx-auto mb-2">
             <Badge variant="outline" className="border-accent text-accent">

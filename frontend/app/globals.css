@@ -4,49 +4,51 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Rotaract themed colors - Blue and Gold */
-  --background: oklch(0.13 0.01 260);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.17 0.01 260);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.17 0.01 260);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.55 0.2 250);
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.22 0.01 260);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.22 0.01 260);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.75 0.18 85);
-  --accent-foreground: oklch(0.15 0 0);
-  --destructive: oklch(0.55 0.22 25);
+  /* Evergreen Rotary palette — clean cool-ink neutrals, a vivid azure as the
+     hero color, gold as a bright accent. Year-agnostic, high contrast. */
+  --background: oklch(0.155 0.014 256);
+  --foreground: oklch(0.975 0.004 250);
+  --card: oklch(0.2 0.016 256);
+  --card-foreground: oklch(0.975 0.004 250);
+  --popover: oklch(0.2 0.016 256);
+  --popover-foreground: oklch(0.975 0.004 250);
+  --primary: oklch(0.645 0.188 252);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.245 0.016 256);
+  --secondary-foreground: oklch(0.975 0.004 250);
+  --muted: oklch(0.245 0.016 256);
+  --muted-foreground: oklch(0.74 0.013 258);
+  --accent: oklch(0.83 0.142 85);
+  --accent-foreground: oklch(0.2 0.04 80);
+  --destructive: oklch(0.6 0.21 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.28 0.01 260);
-  --input: oklch(0.22 0.01 260);
-  --ring: oklch(0.55 0.2 250);
-  --chart-1: oklch(0.55 0.2 250);
-  --chart-2: oklch(0.75 0.18 85);
-  --chart-3: oklch(0.65 0.15 160);
-  --chart-4: oklch(0.6 0.2 300);
-  --chart-5: oklch(0.7 0.2 30);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.1 0.01 260);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.55 0.2 250);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.2 0.01 260);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.25 0.01 260);
-  --sidebar-ring: oklch(0.55 0.2 250);
-  --success: oklch(0.65 0.2 145);
+  --border: oklch(0.32 0.016 256);
+  --input: oklch(0.245 0.016 256);
+  --ring: oklch(0.645 0.188 252);
+  --chart-1: oklch(0.645 0.188 252);
+  --chart-2: oklch(0.83 0.142 85);
+  --chart-3: oklch(0.7 0.14 205);
+  --chart-4: oklch(0.62 0.17 290);
+  --chart-5: oklch(0.72 0.16 150);
+  --radius: 0.85rem;
+  --sidebar: oklch(0.175 0.016 256);
+  --sidebar-foreground: oklch(0.975 0.004 250);
+  --sidebar-primary: oklch(0.645 0.188 252);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.245 0.016 256);
+  --sidebar-accent-foreground: oklch(0.975 0.004 250);
+  --sidebar-border: oklch(0.3 0.016 256);
+  --sidebar-ring: oklch(0.645 0.188 252);
+  --success: oklch(0.7 0.16 152);
   --success-foreground: oklch(0.98 0 0);
-  --warning: oklch(0.75 0.18 85);
-  --warning-foreground: oklch(0.15 0 0);
+  --warning: oklch(0.83 0.142 85);
+  --warning-foreground: oklch(0.2 0.04 80);
 }
 
 @theme inline {
-  --font-sans: "Inter", "Geist", sans-serif;
-  --font-mono: "Geist Mono", monospace;
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-code), ui-monospace, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -97,18 +99,331 @@
   body {
     overflow-x: hidden;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
+  /* Display typeface for headings — premium, characterful. */
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.022em;
+  }
+  h1 { letter-spacing: -0.035em; }
   img,
   iframe,
   video {
     max-width: 100%;
+  }
+
+  /* Branded scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--background);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--primary) 45%, var(--border));
+    border-radius: 999px;
+    border: 2px solid var(--background);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 40%, transparent);
+    color: var(--foreground);
   }
 }
 
 @layer components {
   .container {
     @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  /* ── Accent word (refined, monochrome — no rainbow) ── */
+  .text-gradient,
+  .text-gradient-animated {
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--primary) 55%, var(--foreground)),
+      var(--primary)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: none;
+  }
+
+  /* ── Surfaces (refined: solid-ish, crisp edge, depth) ── */
+  .glass {
+    background: color-mix(in oklch, var(--card) 88%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid color-mix(in oklch, var(--border) 95%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 6%, transparent),
+      0 10px 30px -22px rgb(0 0 0 / 0.7);
+  }
+  .glass-strong {
+    background: color-mix(in oklch, var(--card) 96%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid color-mix(in oklch, var(--border) 100%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 7%, transparent),
+      0 24px 60px -32px rgb(0 0 0 / 0.85);
+  }
+
+  /* ── Depth shadow (replaces neon glow) ───────── */
+  .glow {
+    box-shadow: 0 26px 70px -34px color-mix(in oklch, var(--primary) 40%, black);
+  }
+  .glow-accent {
+    box-shadow: 0 26px 70px -34px color-mix(in oklch, var(--accent) 35%, black);
+  }
+  .text-glow {
+    text-shadow: none;
+  }
+
+  /* ── Hover lift card ─────────────────────────── */
+  .card-lift {
+    transition:
+      transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1),
+      box-shadow 0.4s cubic-bezier(0.2, 0.7, 0.2, 1),
+      border-color 0.4s ease;
+    will-change: transform;
+  }
+  .card-lift:hover {
+    transform: translateY(-4px);
+    border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
+    box-shadow: 0 22px 50px -28px rgb(0 0 0 / 0.8);
+  }
+
+  /* ── Atmosphere: one subtle azure wash (no muddy blobs) ── */
+  .mesh-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(
+      70% 60% at 50% -15%,
+      color-mix(in oklch, var(--primary) 16%, transparent),
+      transparent 72%
+    );
+  }
+  /* Fine engineering grid, faint, masked to the top */
+  .grid-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(
+        color-mix(in oklch, var(--foreground) 4%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        90deg,
+        color-mix(in oklch, var(--foreground) 4%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 80% 55% at 50% 0%, #000 25%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 55% at 50% 0%, #000 25%, transparent 70%);
+  }
+
+  /* ── Section heading eyebrow ─────────────────── */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.18em];
+    background: color-mix(in oklch, var(--primary) 10%, transparent);
+    color: color-mix(in oklch, var(--primary) 70%, var(--foreground));
+    border: 1px solid color-mix(in oklch, var(--primary) 24%, transparent);
+  }
+
+  /* ── Interactive 3D hero (Hero3D) ────────────── */
+  .hero3d-stage {
+    perspective: 1200px;
+    transform-style: preserve-3d;
+  }
+  .hero3d-content {
+    transform: rotateY(calc(var(--px, 0) * 7deg)) rotateX(calc(var(--py, 0) * -7deg));
+    transform-style: preserve-3d;
+    transition: transform 0.25s ease-out;
+  }
+  .hero3d-chip {
+    transform: translate3d(
+      calc(var(--px, 0) * var(--depth, 40) * 1px),
+      calc(var(--py, 0) * var(--depth, 40) * 1px),
+      0
+    );
+    transition: transform 0.3s ease-out;
+    animation: floaty 8s ease-in-out infinite;
+  }
+  .hero3d-layer {
+    transform: translate3d(
+      calc(var(--px, 0) * var(--depth, 20) * 1px),
+      calc(var(--py, 0) * var(--depth, 20) * 1px),
+      0
+    );
+    transition: transform 0.4s ease-out;
+  }
+
+  /* Scroll cue (mouse wheel hint) */
+  .scroll-cue {
+    width: 26px;
+    height: 42px;
+    border-radius: 999px;
+    border: 2px solid color-mix(in oklch, var(--foreground) 30%, transparent);
+    position: relative;
+    display: inline-block;
+  }
+  .scroll-cue::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 8px;
+    width: 4px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--primary);
+    transform: translateX(-50%);
+    animation: scroll-dot 1.8s ease-in-out infinite;
+  }
+
+  /* ── 3D tilt (TiltCard) ──────────────────────── */
+  .tilt-perspective {
+    perspective: 1100px;
+  }
+  .tilt-card {
+    position: relative;
+    transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateZ(0);
+    transform-style: preserve-3d;
+    transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .tilt-card > .tilt-sheen {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    background: radial-gradient(
+      420px circle at var(--mx, 50%) var(--my, 50%),
+      color-mix(in oklch, white 12%, transparent),
+      transparent 45%
+    );
+  }
+  .tilt-card:hover > .tilt-sheen {
+    opacity: 1;
+  }
+
+  /* ── Scroll reveal (used with <Reveal/>) ─────── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(26px);
+    transition:
+      opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Keyframes & entrance animations ───────────── */
+@keyframes gradient-pan {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+@keyframes glow-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes scroll-dot {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0);
+  }
+  40% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.animate-fade-in {
+  animation: fade-in 0.9s ease both;
+}
+.animate-float {
+  animation: floaty 7s ease-in-out infinite;
+}
+.animate-glow-pulse {
+  animation: glow-pulse 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
   }
 }

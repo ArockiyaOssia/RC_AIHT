@@ -2,6 +2,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Mail, Phone } from "lucide-react"
 import { createClient } from "@supabase/supabase-js"
+import { PageHero } from "@/components/page-hero"
+import { Reveal } from "@/components/reveal"
+import { TiltCard } from "@/components/tilt-card"
 
 export const dynamic = "force-dynamic"
 
@@ -77,14 +80,12 @@ export default async function BoardPage() {
   if (!board || members.length === 0) {
     return (
       <div className="flex flex-col">
-        <section className="py-16 lg:py-24 border-b border-border">
-          <div className="container px-4 text-center">
-            <h1 className="text-4xl font-bold tracking-tight">
-              Current <span className="text-primary">Board</span>
-            </h1>
-            <p className="mt-6 text-lg text-muted-foreground">Current board details are not available yet.</p>
-          </div>
-        </section>
+        <PageHero
+          eyebrow="Leadership"
+          title={<>Current <span className="text-gradient">Board</span></>}
+        >
+          Current board details are not available yet.
+        </PageHero>
       </div>
     )
   }
@@ -92,27 +93,22 @@ export default async function BoardPage() {
   return (
     <div className="flex flex-col">
       {/* Hero */}
-      <section className="py-16 lg:py-24 border-b border-border">
-        <div className="container px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Current <span className="text-primary">Board</span>
-            </h1>
-            <p className="mt-6 text-lg text-muted-foreground">
-              Meet the board members for Rotaract Year {board.rotaractYear}.
-            </p>
-          </div>
-        </div>
-      </section>
+      <PageHero
+        eyebrow="Leadership"
+        title={<>Current <span className="text-gradient">Board</span></>}
+      >
+        Meet the board members for Rotaract Year {board.rotaractYear}.
+      </PageHero>
 
       {/* Board Members Grid */}
       <section className="py-16">
         <div className="container px-4">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 max-w-7xl mx-auto">
             {members.map((member, index) => (
+              <Reveal key={`${member.position || "member"}-${index}`} delay={(index % 4) * 70}>
+              <TiltCard className="rounded-[var(--radius)] overflow-hidden" max={5}>
               <Card
-                key={`${member.position || "member"}-${index}`}
-                className="group bg-card border-border overflow-hidden flex flex-col hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1"
+                className="group glass border-border/60 overflow-hidden flex flex-col h-full"
               >
                 {/* Image Section - Showing Full Image */}
                 <div className="relative h-80 w-full overflow-hidden bg-muted flex items-center justify-center">
@@ -168,6 +164,8 @@ export default async function BoardPage() {
                   </div>
                 </CardContent>
               </Card>
+              </TiltCard>
+              </Reveal>
             ))}
           </div>
         </div>

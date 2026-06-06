@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ExternalLink, Globe, Users, Heart, Award } from "lucide-react"
 import { DynamicContent } from "@/components/dynamic-content"
+import { PageHero } from "@/components/page-hero"
 
 export const metadata = {
   title: "About Rotaract | Rotaract Club of AIH",
@@ -14,21 +15,16 @@ export default function AboutRotaractPage() {
   return (
     <div className="flex flex-col">
       {/* Hero */}
-      <section className="py-16 lg:py-24 border-b border-border">
-        <div className="container px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              What is <span className="text-primary">Rotaract</span>?
-            </h1>
-            <DynamicContent 
-              as="p" 
-              field="aboutRotaract" 
-              className="mt-6 text-lg text-muted-foreground" 
-              defaultText="Rotaract is a global network of young leaders who are committed to making a difference in their communities. With over 10,000 clubs worldwide, we are united by a shared vision of service above self." 
-            />
-          </div>
-        </div>
-      </section>
+      <PageHero
+        eyebrow="About Rotaract"
+        title={<>What is <span className="text-gradient">Rotaract</span>?</>}
+      >
+        <DynamicContent
+          as="p"
+          field="aboutRotaract"
+          defaultText="Rotaract is a global network of young leaders who are committed to making a difference in their communities. With over 10,000 clubs worldwide, we are united by a shared vision of service above self."
+        />
+      </PageHero>
 
       {/* Overview */}
       <section className="py-16">
@@ -59,28 +55,28 @@ export default function AboutRotaractPage() {
               </Button>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <Card className="bg-card border-border">
+              <Card className="glass card-lift border-border/60">
                 <CardContent className="pt-6">
                   <Globe className="h-10 w-10 text-primary mb-3" />
                   <p className="text-3xl font-bold text-accent">180+</p>
                   <p className="text-sm text-muted-foreground">Countries</p>
                 </CardContent>
               </Card>
-              <Card className="bg-card border-border">
+              <Card className="glass card-lift border-border/60">
                 <CardContent className="pt-6">
                   <Users className="h-10 w-10 text-primary mb-3" />
                   <p className="text-3xl font-bold text-accent">200K+</p>
                   <p className="text-sm text-muted-foreground">Members</p>
                 </CardContent>
               </Card>
-              <Card className="bg-card border-border">
+              <Card className="glass card-lift border-border/60">
                 <CardContent className="pt-6">
                   <Award className="h-10 w-10 text-primary mb-3" />
                   <p className="text-3xl font-bold text-accent">10K+</p>
                   <p className="text-sm text-muted-foreground">Clubs</p>
                 </CardContent>
               </Card>
-              <Card className="bg-card border-border">
+              <Card className="glass card-lift border-border/60">
                 <CardContent className="pt-6">
                   <Heart className="h-10 w-10 text-primary mb-3" />
                   <p className="text-3xl font-bold text-accent">1929</p>
@@ -93,8 +89,9 @@ export default function AboutRotaractPage() {
       </section>
 
       {/* Rotary Connection */}
-      <section className="py-16 bg-card border-y border-border">
-        <div className="container px-4">
+      <section className="relative overflow-hidden py-16 border-y border-border/60">
+        <div className="mesh-bg opacity-50" />
+        <div className="container relative px-4">
           <div className="max-w-3xl mx-auto text-center mb-12">
             <h2 className="text-3xl font-bold mb-4">The Rotary Connection</h2>
             <p className="text-muted-foreground">
@@ -103,7 +100,7 @@ export default function AboutRotaractPage() {
             </p>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
-            <Card className="bg-secondary/50 border-border">
+            <Card className="glass card-lift border-border/60">
               <CardHeader>
                 <CardTitle className="text-lg">Rotary International</CardTitle>
               </CardHeader>
@@ -114,7 +111,7 @@ export default function AboutRotaractPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card className="bg-secondary/50 border-border">
+            <Card className="glass card-lift border-border/60">
               <CardHeader>
                 <CardTitle className="text-lg">Rotary Clubs</CardTitle>
               </CardHeader>
@@ -125,7 +122,7 @@ export default function AboutRotaractPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card className="bg-secondary/50 border-border">
+            <Card className="glass card-lift border-border/60">
               <CardHeader>
                 <CardTitle className="text-lg">Interact Clubs</CardTitle>
               </CardHeader>
@@ -168,20 +165,23 @@ export default function AboutRotaractPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-16 bg-card border-t border-border">
+      <section className="py-20">
         <div className="container px-4">
-          <div className="max-w-2xl mx-auto text-center">
-            <h2 className="text-2xl font-bold mb-4">Ready to Make a Difference?</h2>
-            <p className="text-muted-foreground mb-6">
-              Join Rotaract Club of AIH and be part of this global movement of young leaders.
-            </p>
-            <div className="flex flex-wrap justify-center gap-4">
-              <Button asChild>
-                <Link href="/about-club">About Our Club</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/contact">Contact Us</Link>
-              </Button>
+          <div className="glass-strong relative mx-auto max-w-3xl overflow-hidden rounded-3xl p-10 text-center glow">
+            <div className="mesh-bg opacity-70" />
+            <div className="relative">
+              <h2 className="text-2xl font-bold mb-4 sm:text-3xl">Ready to Make a <span className="text-gradient">Difference</span>?</h2>
+              <p className="text-muted-foreground mb-6">
+                Join Rotaract Club of AIHT and be part of this global movement of young leaders.
+              </p>
+              <div className="flex flex-wrap justify-center gap-4">
+                <Button className="glow" asChild>
+                  <Link href="/register">Join the Club</Link>
+                </Button>
+                <Button variant="outline" className="glass" asChild>
+                  <Link href="/about-club">About Our Club</Link>
+                </Button>
+              </div>
             </div>
           </div>
         </div>

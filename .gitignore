@@ -36,3 +36,10 @@ frontend/dist/
 .idea/
 *.swp
 *.swo
+
+# Python virtualenv
+venv/
+.venv/
+
+# Local uploads (user content, not code)
+backend/uploads/

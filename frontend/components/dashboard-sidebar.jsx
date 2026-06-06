@@ -27,6 +27,7 @@ import {
   BarChart3,
   Mail,
   Image as ImageIcon,
+  UserPlus,
 } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
@@ -74,6 +75,11 @@ const adminNavItems = [
     title: "Members",
     href: "/admin/members",
     icon: Users,
+  },
+  {
+    title: "Registrations",
+    href: "/admin/registrations",
+    icon: UserPlus,
   },
   {
     title: "Events",

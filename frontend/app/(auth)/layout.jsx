@@ -26,9 +26,11 @@ export default function AuthLayout({ children }) {
   }, [logoUrl])
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="relative min-h-screen flex flex-col overflow-hidden">
+      <div className="mesh-bg" />
+      <div className="grid-overlay" />
       {/* Simple Header */}
-      <header className="border-b border-border bg-card">
+      <header className="relative z-10 border-b border-border/60 bg-background/60 backdrop-blur-xl">
         <div className="container px-4 h-16 flex items-center">
           <Link href={homeHref} className="flex items-center gap-3">
             {showLogo ? (
@@ -39,7 +41,7 @@ export default function AuthLayout({ children }) {
                 onError={() => setLogoError(true)}
               />
             ) : (
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent glow">
                 <span className="text-lg font-bold text-primary-foreground">R</span>
               </div>
             )}
@@ -52,10 +54,10 @@ export default function AuthLayout({ children }) {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-4">{children}</main>
+      <main className="relative z-10 flex-1 flex items-center justify-center p-4">{children}</main>
 
       {/* Simple Footer */}
-      <footer className="border-t border-border py-4">
+      <footer className="relative z-10 border-t border-border/60 py-4">
         <div className="container px-4 text-center text-sm text-muted-foreground">
           <p>© {new Date().getFullYear()} {clubName}. All rights reserved.</p>
         </div>

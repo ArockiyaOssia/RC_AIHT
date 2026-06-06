@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Mail, Phone, MapPin, Instagram, Facebook, Linkedin, Send, Clock, Twitter, Youtube, Globe } from "lucide-react"
 import { DynamicContent } from "@/components/dynamic-content"
+import { PageHero } from "@/components/page-hero"
 import api from "@/lib/api"
 import { useClubSettings } from "@/contexts/club-settings-context"
 
@@ -51,28 +52,23 @@ export default function ContactPage() {
   return (
     <div className="flex flex-col">
       {/* Hero */}
-      <section className="py-16 lg:py-24 border-b border-border">
-        <div className="container px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Get in <span className="text-primary">Touch</span>
-            </h1>
-            <DynamicContent 
-              as="p" 
-              field="contactDescription" 
-              className="mt-6 text-lg text-muted-foreground" 
-              defaultText="Have questions about Rotaract or want to join our club? We'd love to hear from you." 
-            />
-          </div>
-        </div>
-      </section>
+      <PageHero
+        eyebrow="Contact"
+        title={<>Get in <span className="text-gradient">Touch</span></>}
+      >
+        <DynamicContent
+          as="p"
+          field="contactDescription"
+          defaultText="Have questions about Rotaract or want to join our club? We'd love to hear from you."
+        />
+      </PageHero>
 
       {/* Contact Section */}
       <section className="py-16">
         <div className="container px-4">
           <div className="grid gap-8 lg:grid-cols-2">
             {/* Contact Form */}
-            <Card className="bg-card border-border">
+            <Card className="glass border-border/60">
               <CardHeader>
                 <CardTitle>Send us a Message</CardTitle>
               </CardHeader>
@@ -170,7 +166,7 @@ export default function ContactPage() {
 
             {/* Contact Info */}
             <div className="space-y-6">
-              <Card className="bg-card border-border">
+              <Card className="glass border-border/60">
                 <CardContent className="pt-6">
                   <h3 className="font-semibold mb-4">Contact Information</h3>
                   <div className="space-y-4">
@@ -220,7 +216,7 @@ export default function ContactPage() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-card border-border">
+              <Card className="glass border-border/60">
                 <CardContent className="pt-6">
                   <h3 className="font-semibold mb-4">Follow Us</h3>
                   <div className="flex gap-4">
@@ -291,7 +287,7 @@ export default function ContactPage() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-secondary/50 border-border">
+              <Card className="glass border-border/60">
                 <CardContent className="pt-6">
                   <h3 className="font-semibold mb-2">Parent Organization</h3>
                   <p className="text-sm text-muted-foreground mb-2"><DynamicContent field="parentClubName" defaultText="Rotary Club of Chennai Central" /></p>
@@ -304,10 +300,10 @@ export default function ContactPage() {
       </section>
 
       {/* Map Section */}
-      <section className="py-16 bg-card border-t border-border">
+      <section className="py-16 border-t border-border/60">
         <div className="container px-4">
-          <h2 className="text-2xl font-bold mb-8 text-center">Find Us</h2>
-          <div className="aspect-video max-w-4xl mx-auto rounded-lg overflow-hidden border border-border">
+          <h2 className="text-2xl font-bold mb-8 text-center">Find <span className="text-gradient">Us</span></h2>
+          <div className="aspect-video max-w-4xl mx-auto rounded-2xl overflow-hidden border border-border/60 glass glow">
             <iframe
               src={settings?.googleMapUrl || "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3890.3863225309346!2d80.22595567538026!3d12.818294318220223!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3a525a64a9d9fdbd%3A0xfe20d2c9e0df4861!2sAnand%20Institute%20of%20Higher%20Technology!5e0!3m2!1sen!2sin!4v1775803619602!5m2!1sen!2sin"}
               width="100%"

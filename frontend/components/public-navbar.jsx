@@ -45,7 +45,7 @@ export function PublicNavbar() {
   }, [logoUrl])
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-border/60 bg-background/70 backdrop-blur-xl supports-[backdrop-filter]:bg-background/50">
       <div className="container flex h-16 items-center justify-between">
         <Link href={logoHref} className="flex items-center gap-3">
           {showLogo ? (
@@ -56,7 +56,7 @@ export function PublicNavbar() {
               onError={() => setLogoError(true)}
             />
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent glow">
               <span className="text-lg font-bold text-primary-foreground">R</span>
             </div>
           )}
@@ -80,6 +80,11 @@ export function PublicNavbar() {
         </nav>
 
         <div className="flex items-center gap-2">
+          {!isAuthenticated && (
+            <Button asChild size="sm" className="hidden sm:flex glow">
+              <Link href="/register">Join</Link>
+            </Button>
+          )}
           {isAuthenticated ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -192,6 +197,13 @@ export function PublicNavbar() {
                   </>
                 ) : (
                   <>
+                    <Link
+                      href="/register"
+                      onClick={() => setIsOpen(false)}
+                      className="px-3 py-2 text-sm font-semibold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md text-center"
+                    >
+                      Join the Club
+                    </Link>
                     <Link
                       href="/login"
                       onClick={() => setIsOpen(false)}

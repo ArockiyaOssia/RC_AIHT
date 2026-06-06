@@ -6,6 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar, MapPin, Users } from "lucide-react"
+import { PageHero } from "@/components/page-hero"
+import { Reveal } from "@/components/reveal"
+import { TiltCard } from "@/components/tilt-card"
 import api from "@/lib/api"
 
 const categoryLabels = {
@@ -43,18 +46,12 @@ export default function PublicEventsPage() {
 
   return (
     <div className="flex flex-col">
-      <section className="py-16 lg:py-24 border-b border-border">
-        <div className="container px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Public <span className="text-primary">Events</span>
-            </h1>
-            <p className="mt-6 text-lg text-muted-foreground">
-              Explore all our events open for public viewing.
-            </p>
-          </div>
-        </div>
-      </section>
+      <PageHero
+        eyebrow="What we do"
+        title={<>Public <span className="text-gradient">Events</span></>}
+      >
+        Explore all our events open for public viewing.
+      </PageHero>
 
       <section className="py-12">
         <div className="container px-4">
@@ -66,8 +63,10 @@ export default function PublicEventsPage() {
             <div className="text-center text-muted-foreground py-12">No public events available right now.</div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {events.map((event) => (
-                <Card key={event._id} className="bg-card border-border">
+              {events.map((event, i) => (
+                <Reveal key={event._id} delay={(i % 3) * 80}>
+                <TiltCard className="glass border-border/60 rounded-[var(--radius)]" max={5}>
+                <Card className="bg-transparent border-0 shadow-none h-full">
                   <CardHeader className="space-y-2">
                     <Badge variant="outline" className="w-fit capitalize">
                       {categoryLabels[event.category] || event.category}
@@ -114,11 +113,13 @@ export default function PublicEventsPage() {
                       </div>
                     )}
 
-                    <Button variant="outline" className="w-full bg-transparent" asChild>
+                    <Button variant="outline" className="w-full" asChild>
                       <Link href={`/events/${event._id}`}>View Details</Link>
                     </Button>
                   </CardContent>
                 </Card>
+                </TiltCard>
+                </Reveal>
               ))}
             </div>
           )}

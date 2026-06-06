@@ -28,8 +28,9 @@ export function PublicFooter() {
   }, [logoUrl])
 
   return (
-    <footer className="border-t border-border bg-card">
-      <div className="container px-4 pt-12 pb-6">
+    <footer className="relative overflow-hidden border-t border-border/60 bg-card/60 backdrop-blur">
+      <div className="mesh-bg opacity-40" />
+      <div className="container relative px-4 pt-12 pb-6">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
           {/* Club Info */}
           <div>
@@ -159,19 +160,8 @@ export function PublicFooter() {
           </div>
         </div>
 
-        <div className="mt-6 pt-4 border-t border-border text-center text-sm text-muted-foreground">
+        <div className="mt-6 pt-4 border-t border-border/60 text-center text-sm text-muted-foreground">
           <p>© {currentYear} {clubName}. All rights reserved.</p>
-          <p className="mt-2">
-            Developed by{" "}
-            <a
-              href="https://www.fiverr.com/senthilragu?public_mode=true"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Senthil
-            </a>
-          </p>
         </div>
       </div>
     </footer>
