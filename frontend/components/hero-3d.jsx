@@ -47,9 +47,9 @@ export function Hero3D() {
       <div className="mesh-bg" />
       <div className="grid-overlay" />
 
-      {/* parallax glow orbs */}
-      <div className="hero3d-layer absolute -top-28 left-[6%] h-72 w-72 rounded-full bg-primary/20 blur-3xl" style={{ "--depth": 22 }} />
-      <div className="hero3d-layer absolute -bottom-24 right-[4%] h-80 w-80 rounded-full bg-accent/12 blur-3xl" style={{ "--depth": 16 }} />
+      {/* parallax glow orbs (decorative — must never block clicks) */}
+      <div className="hero3d-layer pointer-events-none absolute -top-28 left-[6%] h-72 w-72 rounded-full bg-primary/20 blur-3xl" style={{ "--depth": 22 }} />
+      <div className="hero3d-layer pointer-events-none absolute -bottom-24 right-[4%] h-80 w-80 rounded-full bg-accent/12 blur-3xl" style={{ "--depth": 16 }} />
 
       <div className="container relative">
         <div className="hero3d-stage relative mx-auto max-w-4xl text-center">
@@ -67,7 +67,7 @@ export function Hero3D() {
             </div>
           ))}
 
-          <div className="hero3d-content">
+          <div className="hero3d-content relative z-10">
             <span className="eyebrow animate-fade-up">
               <Sparkles className="h-3.5 w-3.5" /> Rotaract Year {year}
             </span>
