@@ -248,13 +248,14 @@
   }
 
   /* ── Interactive 3D hero (Hero3D) ────────────── */
+  /* NOTE: no transform-style: preserve-3d here — it makes descendant links
+     unclickable in Chrome. Plain rotate under perspective keeps the tilt AND
+     keeps the buttons clickable. */
   .hero3d-stage {
     perspective: 1200px;
-    transform-style: preserve-3d;
   }
   .hero3d-content {
-    transform: rotateY(calc(var(--px, 0) * 7deg)) rotateX(calc(var(--py, 0) * -7deg));
-    transform-style: preserve-3d;
+    transform: rotateY(calc(var(--px, 0) * 6deg)) rotateX(calc(var(--py, 0) * -6deg));
     transition: transform 0.25s ease-out;
   }
   .hero3d-chip {
